@@ -1,0 +1,10 @@
+{
+    "sources": [
+        {"name": "The Hacker News", "url": "https://feeds.feedburner.com/TheHackersNews", "active": true},
+        {"name": "BleepingComputer", "url": "https://www.bleepingcomputer.com/feed/", "active": true},
+        {"name": "USOM Duyurular", "url": "https://www.usom.gov.tr/rss/duyuru.rss", "active": true},
+        {"name": "Siber Bulten", "url": "https://siberbulten.com/feed/", "active": true},
+        {"name": "Dark Reading", "url": "https://www.darkreading.com/rss.xml", "active": true},
+        {"name": "CISA Alerts", "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml", "active": true}
+    ]
+}

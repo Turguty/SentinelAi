@@ -1,0 +1,19 @@
+services:
+  sentinel-ai:
+    build: .
+    container_name: sentinel_ai_app
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      # Veritabanını kalıcı hale getiren volume
+      - sentinel_data:/app/data
+      # Kaynak listesini konteyneri durdurmadan güncelleyebilmek için bağladık
+      - ./sources.json:/app/sources.json
+    restart: always
+
+volumes:
+  sentinel_data:
+    driver: local

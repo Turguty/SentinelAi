@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>SentinelAi | SOC Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="icon" href="data:,">
+</head>
+<body class="dark-theme">
+    <nav class="navbar">
+        <div class="nav-left">
+            <div class="logo">SENTINEL<span>AI</span></div>
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Tehditlerde ara..." onkeyup="searchNews(1)">
+            </div>
+        </div>
+        <div class="nav-right">
+            <button onclick="downloadWeeklyReport()" class="btn-report">📅 Haftalık Rapor İndir</button>
+            <div class="status-indicator"><span class="dot"></span> Sistem Aktif</div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="charts-container">
+            <div class="chart-card">
+                <h4>Kaynak Veri Dağılımı</h4>
+                <canvas id="sourceChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h4>Haber Yoğunluğu</h4>
+                <canvas id="barChart"></canvas>
+            </div>
+        </section>
+
+        <section class="tools-container">
+            <div class="tool-card">
+                <h4>CVE Analizi</h4>
+                <div class="tool-input-group">
+                    <input type="text" id="cve-input" placeholder="CVE-2024-...">
+                    <button onclick="queryCVE()">Sorgula</button>
+                </div>
+            </div>
+            <div class="tool-card">
+                <h4>IP İstihbaratı</h4>
+                <div class="tool-input-group">
+                    <input type="text" id="ip-input" placeholder="8.8.8.8">
+                    <button onclick="queryIP()">Sorgula</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="feed-section">
+            <div class="section-header"><h2>Güncel Tehdit Akışı</h2></div>
+            <div id="news-feed" class="news-grid"></div>
+            <div id="pagination-container" class="pagination-wrapper"></div>
+        </section>
+
+        <section id="analysis-panel" class="analysis-panel hidden">
+            <div class="panel-header">
+                <h3>Analiz Detayları</h3>
+                <button onclick="closeAnalysis()" class="btn-close-panel">&times;</button>
+            </div>
+            <div class="panel-download-zone">
+                <button onclick="downloadSingleReport()" class="btn-pdf-modern">
+                    <span class="icon">📥</span> PDF RAPORU OLARAK İNDİR
+                </button>
+            </div>
+            <div id="analysis-text" class="analysis-body">Analiz yükleniyor...</div>
+        </section>
+    </main>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
