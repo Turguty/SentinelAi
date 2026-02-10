@@ -6,8 +6,8 @@ from datetime import datetime
 
 class NewsSentinel:
     def __init__(self):
-        self.db_path = "/app/data/sentinel.db"
-        self.sources_path = "/app/sources.json"
+        self.db_path = "data/sentinel.db"
+        self.sources_path = "sources.json"
         self._init_db()
 
     def _init_db(self):

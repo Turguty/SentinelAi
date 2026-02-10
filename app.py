@@ -1,6 +1,7 @@
 import os
 import requests
 import sqlite3
+import subprocess
 import io
 import re
 from flask import Flask, render_template, jsonify, request, send_file
@@ -18,6 +19,22 @@ app = Flask(__name__)
 DB_PATH = "/app/data/sentinel.db"
 sentinel_fetcher = NewsSentinel()
 sentinel_brain = SentinelBrain()
+
+def run_fetcher():
+    try:
+        # Mevcut dosyanın bulunduğu ana dizini bul (/app)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"📡 Haberler taranıyor (Dizin: {base_dir})...")
+        
+        # Python'un ana dizinde olduğunu varsayarak core/fetcher.py'yi çalıştır
+        subprocess.run(
+            ["python3", "core/fetcher.py"], 
+            cwd=base_dir, # Çalışma dizinini /app olarak sabitle
+            check=True
+        )
+        print("✅ Tarama tamamlandı.")
+    except Exception as e:
+        print(f"❌ Haber çekme hatası: {e}")
 
 # -- Veritabanı oluşturma
 
@@ -45,7 +62,7 @@ def init_db():
 
 # Uygulama nesnesi (app = Flask(__name__)) oluşturulduktan hemen sonra çağır:
 init_db()
-
+run_fetcher()
 
 
 # --- PDF İÇİN GÜVENLİ METİN TEMİZLEME (KESİN ÇÖZÜM) ---
@@ -79,6 +96,80 @@ scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(func=scheduled_scan, trigger="interval", minutes=5)
 scheduler.start()
 
+# --- AI Yönetim Sınıfı (Mevcut kodun üst kısmına ekle) ---
+class AIManager:
+    def __init__(self):
+        # API anahtarlarını .env'den çekiyoruz
+        self.keys = {
+            "gemini": os.getenv('GEMINI_API_KEY'),
+            "groq": os.getenv('GROQ_API_KEY'),
+            "mistral": os.getenv('MISTRAL_API_KEY')
+        }
+        # Deneme sırası
+        self.order = ["gemini", "groq", "mistral"]
+
+    def analyze(self, prompt):
+        for service in self.order:
+            if not self.keys.get(service):
+                continue
+            try:
+                if service == "gemini":
+                    from google import genai
+                    client = genai.Client(api_key=self.keys["gemini"])
+                    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    return response.text
+                
+                elif service == "groq":
+                    from groq import Groq
+                    client = Groq(api_key=self.keys["groq"])
+                    completion = client.chat.completions.create(
+                        model="llama-3.1-70b-versatile",
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    return completion.choices[0].message.content
+
+                elif service == "mistral":
+                    from mistralai import Mistral
+                    client = Mistral(api_key=self.keys["mistral"])
+                    res = client.chat.complete(model="mistral-large-latest", messages=[{"role": "user", "content": prompt}])
+                    return res.choices[0].message.content
+            
+            except Exception as e:
+                print(f"⚠️ {service.upper()} hatası: {str(e)} - Sıradakine geçiliyor...")
+                continue
+        
+        return "HATA: Hiçbir AI servisi yanıt vermiyor."
+
+ai_manager = AIManager()
+
+# --- Güncellenmiş Analiz Rotası ---
+@app.route('/api/analyze', methods=['POST'])
+def analyze_news():
+    data = request.json
+    title, link = data.get('title'), data.get('link')
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Önce veritabanına bak
+    cursor.execute("SELECT ai_analysis FROM news WHERE link = ?", (link,))
+    row = cursor.fetchone()
+    if row and row[0]:
+        conn.close()
+        return jsonify({"analysis": row[0]})
+
+    # Yoksa AI Failover sistemini çalıştır
+    prompt = f"Siber güvenlik tehdit analizi yap. Seviyeyi belirt: {title}"
+    analysis_result = ai_manager.analyze(prompt)
+
+    if "HATA:" not in analysis_result:
+        cursor.execute("UPDATE news SET ai_analysis = ? WHERE link = ?", (analysis_result, link))
+        conn.commit()
+    
+    conn.close()
+    return jsonify({"analysis": analysis_result})
+
+
 # --- ANA ROTAlar ---
 
 @app.route('/')
@@ -99,23 +190,7 @@ def get_stats():
         return jsonify({"sources": source_stats})
     except: return jsonify({"sources": []})
 
-@app.route('/api/analyze', methods=['POST'])
-def analyze():
-    data = request.json
-    title = data.get('title')
-    link = data.get('link')
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT ai_analysis FROM news WHERE link = ?", (link,))
-    existing = cursor.fetchone()
-    if existing and existing[0]:
-        conn.close()
-        return jsonify({"analysis": existing[0]})
-    analysis = sentinel_brain.analyze_incident(title)
-    cursor.execute("UPDATE news SET ai_analysis = ? WHERE link = ?", (analysis, link))
-    conn.commit()
-    conn.close()
-    return jsonify({"analysis": analysis})
+
 
 @app.route('/api/report/single', methods=['POST'])
 def report_single():

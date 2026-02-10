@@ -4,3 +4,5 @@ python-dotenv
 feedparser
 APScheduler
 fpdf2
+groq
+mistralai
