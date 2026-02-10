@@ -39,9 +39,17 @@ async function fetchNews(page = 1) {
     const query = document.getElementById('search-input').value;
     const res = await fetch(`/api/news?page=${page}&search=${encodeURIComponent(query)}`);
     const news = await res.json();
+    updateStatus();
     renderNews(news);
     renderPagination(news.length);
 }
+
+async function updateStatus() {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    document.getElementById('sync-time').innerText = data.last_sync;
+}
+
 
 function renderNews(news) {
     const feed = document.getElementById('news-feed');

@@ -99,75 +99,83 @@ scheduler.start()
 # --- AI Yönetim Sınıfı (Mevcut kodun üst kısmına ekle) ---
 class AIManager:
     def __init__(self):
-        # API anahtarlarını .env'den çekiyoruz
         self.keys = {
             "gemini": os.getenv('GEMINI_API_KEY'),
             "groq": os.getenv('GROQ_API_KEY'),
             "mistral": os.getenv('MISTRAL_API_KEY')
         }
-        # Deneme sırası
         self.order = ["gemini", "groq", "mistral"]
 
-    def analyze(self, prompt):
+    def analyze_with_name(self, prompt):
         for service in self.order:
-            if not self.keys.get(service):
+            key = self.keys.get(service)
+            if not key or key == "" or key == "disable": # disable kontrolü eklendi
                 continue
             try:
                 if service == "gemini":
                     from google import genai
-                    client = genai.Client(api_key=self.keys["gemini"])
-                    response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-                    return response.text
+                    client = genai.Client(api_key=key)
+                    res = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+                    return res.text, "gemini"
                 
                 elif service == "groq":
                     from groq import Groq
-                    client = Groq(api_key=self.keys["groq"])
-                    completion = client.chat.completions.create(
+                    client = Groq(api_key=key)
+                    res = client.chat.completions.create(
                         model="llama-3.1-70b-versatile",
                         messages=[{"role": "user", "content": prompt}]
                     )
-                    return completion.choices[0].message.content
+                    return res.choices[0].message.content, "groq"
 
                 elif service == "mistral":
                     from mistralai import Mistral
-                    client = Mistral(api_key=self.keys["mistral"])
+                    client = Mistral(api_key=key)
                     res = client.chat.complete(model="mistral-large-latest", messages=[{"role": "user", "content": prompt}])
-                    return res.choices[0].message.content
-            
+                    return res.choices[0].message.content, "mistral"
             except Exception as e:
-                print(f"⚠️ {service.upper()} hatası: {str(e)} - Sıradakine geçiliyor...")
+                print(f"⚠️ {service.upper()} failover tetiklendi: {e}")
                 continue
         
-        return "HATA: Hiçbir AI servisi yanıt vermiyor."
+        # Hata durumunda bile 2 değer döndürerek "unpack" hatasını engelliyoruz
+        return "Tüm AI servisleri başarısız oldu veya kotalar doldu.", "sistem"
 
 ai_manager = AIManager()
 
 # --- Güncellenmiş Analiz Rotası ---
+
 @app.route('/api/analyze', methods=['POST'])
 def analyze_news():
     data = request.json
     title, link = data.get('title'), data.get('link')
-
+    prompt = f"Siber güvenlik tehdit analizi yap. Tehdit seviyesini KRITIK, ORTA veya DUSUK olarak belirt. Haber: {title}"
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Önce veritabanına bak
     cursor.execute("SELECT ai_analysis FROM news WHERE link = ?", (link,))
     row = cursor.fetchone()
     if row and row[0]:
         conn.close()
         return jsonify({"analysis": row[0]})
 
-    # Yoksa AI Failover sistemini çalıştır
-    prompt = f"Siber güvenlik tehdit analizi yap. Seviyeyi belirt: {title}"
-    analysis_result = ai_manager.analyze(prompt)
-
-    if "HATA:" not in analysis_result:
-        cursor.execute("UPDATE news SET ai_analysis = ? WHERE link = ?", (analysis_result, link))
-        conn.commit()
+    # Unpack hatası artık alınmayacak çünkü fonksiyon hep 2 değer dönecek
+    analysis_text, model_name = ai_manager.analyze_with_name(prompt)
     
+    # Model ismini metnin başına ekle
+    full_response = f"[{model_name.upper()}] {analysis_text}"
+
+    cursor.execute("UPDATE news SET ai_analysis = ? WHERE link = ?", (full_response, link))
+    conn.commit()
     conn.close()
-    return jsonify({"analysis": analysis_result})
+    
+    return jsonify({"analysis": full_response})
+
+# Son güncelleme bilgisini frontend'e basmak için statik bir zaman veya DB'den son haber zamanı:
+@app.route('/api/status')
+def get_status():
+    return jsonify({
+        "last_sync": datetime.now().strftime("%H:%M:%S"),
+        "active_models": [k for k, v in ai_manager.keys.items() if v and v != "disable"]
+    })
 
 
 # --- ANA ROTAlar ---
