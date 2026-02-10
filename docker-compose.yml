@@ -9,7 +9,7 @@ services:
     volumes:
       - .:/app
       # Veritabanını kalıcı hale getiren volume
-      - sentinel_data:/app/data
+      - ./data:/app/data
       # Kaynak listesini konteyneri durdurmadan güncelleyebilmek için bağladık
       - ./sources.json:/app/sources.json
     restart: always

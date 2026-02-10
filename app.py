@@ -15,9 +15,38 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 app = Flask(__name__)
-DB_PATH = "/app/data/sentinel_v2.db"
+DB_PATH = "/app/data/sentinel.db"
 sentinel_fetcher = NewsSentinel()
 sentinel_brain = SentinelBrain()
+
+# -- Veritabanı oluşturma
+
+def init_db():
+    # Klasör kontrolü
+    if not os.path.exists('data'):
+        os.makedirs('data')
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    # Golden Version Tablo Yapısı
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS news (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            link TEXT UNIQUE,
+            published TEXT,
+            source TEXT,
+            ai_analysis TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("✅ Veritabanı başarıyla doğrulandı/oluşturuldu.")
+
+# Uygulama nesnesi (app = Flask(__name__)) oluşturulduktan hemen sonra çağır:
+init_db()
+
+
 
 # --- PDF İÇİN GÜVENLİ METİN TEMİZLEME (KESİN ÇÖZÜM) ---
 def safe_pdf_text(text):
