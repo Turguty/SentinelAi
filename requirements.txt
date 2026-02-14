@@ -1,0 +1,6 @@
+Flask
+google-genai
+groq
+mistralai
+feedparser
+requests
