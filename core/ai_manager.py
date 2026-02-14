@@ -1,21 +1,23 @@
 import os
-import sqlite3
 import time
 import requests
 from dotenv import load_dotenv
-
-# .env dosyasındaki değişkenleri yükle
-load_dotenv()
-
 from google import genai
 from groq import Groq
 from mistralai import Mistral
 
-DB_PATH = 'data/sentinel.db'
+# .env dosyasındaki API anahtarlarını yükle
+load_dotenv()
 
-# AI Manager Sınıfı: Farklı AI API'lerini yönetir.
 class AIManager:
+    """
+    SentinelAi'nın beyin motoru: Birden fazla AI servisini (Gemini, Groq, Mistral vb.) 
+    yedekli (fallback) ve hata toleranslı şekilde yönetir.
+    """
     def __init__(self):
+        """
+        AI servisleri için anahtarları hazırlar ve başlangıç durumlarını (cooldown vb.) ayarlar.
+        """
         self.keys = {
             "gemini": os.getenv('GEMINI_API_KEY'),
             "groq": os.getenv('GROQ_API_KEY'),
@@ -23,12 +25,17 @@ class AIManager:
             "openrouter": os.getenv('OPENROUTER_API_KEY'),
             "huggingface": os.getenv('HUGGINGFACE_API_KEY')
         }
+        # Deneme önceliği sırası
         self.order = ["gemini", "groq", "mistral", "openrouter", "huggingface"]
+        # Hatalı servislerin bekleme süresi takibi
         self.cooldowns = {service: 0 for service in self.order}
-        self.cooldown_duration = 300 
+        self.cooldown_duration = 300  # 5 dakika soğuma süresi
 
     def get_status(self):
-        """Servislerin durumunu döner: 'active', 'cooldown', 'no_key'"""
+        """
+        Her bir AI servisinin mevcut durumunu (aktif, soğumada, anahtar eksik) döner.
+        Dashbord üzerindeki durum çubuğu bu veriyi kullanır.
+        """
         current_time = time.time()
         status = {}
         for service in self.order:
@@ -41,17 +48,21 @@ class AIManager:
         return status
 
     def analyze(self, prompt):
-
+        """
+        Verilen metni (haber, CVE vb.) mevcut AI servislerini sırayla deneyerek analiz eder.
+        Kota aşımı veya hata durumunda otomatik olarak bir sonraki servise geçer.
+        """
         current_time = time.time()
         for service in self.order:
+            # Anahtar kontrolü ve soğuma süresi denetimi
             if not self.keys.get(service) and service != "huggingface": continue
             if current_time < self.cooldowns[service]: continue
             
             try:
-                # Add a small delay before calling the next service to prevent rapid-fire failures
+                # Servisler arası çok hızlı geçişi önlemek için kısa mola
                 time.sleep(1.5) 
                 
-                print(f"🤖 AI Servisi Deneniyor: {service.upper()}")
+                print(f"🤖 AI Deneniyor: {service.upper()}")
                 if service == "gemini": result = self._call_gemini(prompt)
                 elif service == "groq": result = self._call_groq(prompt)
                 elif service == "mistral": result = self._call_mistral(prompt)
@@ -62,49 +73,55 @@ class AIManager:
                     return result
                 else:
                     raise Exception(result)
+
             except Exception as e:
                 print(f"⚠️ {service.upper()} Hatası: {str(e)}")
-                # Failures put the service on cooldown
+                # Hata alan servisi geçici olarak engelle (5 dk)
                 self.cooldowns[service] = current_time + self.cooldown_duration
                 continue
-        return "HATA: Tüm AI servisleri ulaşılamaz durumda."
 
+        return "HATA: Tüm AI servisleri şu an ulaşılamaz durumda."
 
     def _call_gemini(self, prompt):
+        """Google Gemini 2.0 API üzerinden analiz yapar."""
         try:
             client = genai.Client(api_key=self.keys["gemini"])
             return client.models.generate_content(model="gemini-2.0-flash", contents=prompt).text
         except Exception as e:
-            return f"HATA: Gemini - {str(e)}"
+            return f"HATA: {str(e)}"
 
     def _call_groq(self, prompt):
+        """Groq (Llama-3.3) API üzerinden yüksek hızlı analiz yapar."""
         try:
             client = Groq(api_key=self.keys["groq"])
             res = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=[{"role": "user", "content": prompt}])
             return res.choices[0].message.content
         except Exception as e:
-            return f"HATA: Groq - {str(e)}"
+            return f"HATA: {str(e)}"
 
     def _call_mistral(self, prompt):
+        """Mistral AI (Large-Latest) üzerinden analiz yapar."""
         try:
             client = Mistral(api_key=self.keys["mistral"])
             res = client.chat.complete(model="mistral-large-latest", messages=[{"role": "user", "content": prompt}])
             return res.choices[0].message.content
         except Exception as e:
-            return f"HATA: Mistral - {str(e)}"
+            return f"HATA: {str(e)}"
 
     def _call_openrouter(self, prompt):
+        """OpenRouter üzerinden belirlenen modelleri (Gemini vb) çağıran yedek kanal."""
         try:
             headers = {"Authorization": f"Bearer {self.keys['openrouter']}", "Content-Type": "application/json"}
             payload = {"model": "google/gemini-2.0-flash-001", "messages": [{"role": "user", "content": prompt}]}
             res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=20)
             if res.status_code == 200:
                 return res.json()['choices'][0]['message']['content']
-            return f"HATA: OpenRouter HTTP {res.status_code}"
+            return f"HATA: HTTP {res.status_code}"
         except Exception as e:
-            return f"HATA: OpenRouter - {str(e)}"
+            return f"HATA: {str(e)}"
 
     def _call_huggingface(self, prompt):
+        """Hugging Face Inference API üzerinden (Qwen vb) açık kaynak modelleri çağırır."""
         try:
             model = "Qwen/Qwen2.5-72B-Instruct"
             url = f"https://api-inference.huggingface.co/models/{model}"
@@ -116,6 +133,6 @@ class AIManager:
                 data = res.json()
                 if isinstance(data, list) and 'generated_text' in data[0]: return data[0]['generated_text']
                 return str(data)
-            return f"HATA: HuggingFace HTTP {res.status_code}"
+            return f"HATA: HTTP {res.status_code}"
         except Exception as e:
-            return f"HATA: HuggingFace - {str(e)}"
+            return f"HATA: {str(e)}"
