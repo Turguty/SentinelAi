@@ -2,6 +2,10 @@ import os
 import sqlite3
 import time
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from flask import Flask, render_template, request, jsonify
 from core.ai_manager import AIManager
 from core.fetcher import fetch_rss, process_missing_analysis

@@ -5,3 +5,4 @@ mistralai
 feedparser
 requests
 apscheduler
+python-dotenv

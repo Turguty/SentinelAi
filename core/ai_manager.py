@@ -2,6 +2,11 @@ import os
 import sqlite3
 import time
 import requests
+from dotenv import load_dotenv
+
+# .env dosyasındaki değişkenleri yükle
+load_dotenv()
+
 from google import genai
 from groq import Groq
 from mistralai import Mistral
