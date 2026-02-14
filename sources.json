@@ -5,6 +5,15 @@
         {"name": "USOM Duyurular", "url": "https://www.usom.gov.tr/rss/duyuru.rss", "active": true},
         {"name": "Siber Bulten", "url": "https://siberbulten.com/feed/", "active": true},
         {"name": "Dark Reading", "url": "https://www.darkreading.com/rss.xml", "active": true},
-        {"name": "CISA Alerts", "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml", "active": true}
+        {"name": "CISA Alerts", "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml", "active": true},
+        {"name": "ZDNet Security", "url": "https://www.zdnet.com/topic/security/rss.xml", "active": true},
+        {"name": "Threatpost", "url": "https://threatpost.com/feed/", "active": true},
+        {"name": "Help Net Security", "url": "https://www.helpnetsecurity.com/feed/", "active": true},
+        {"name": "SecurityWeek", "url": "https://feeds.feedburner.com/securityweek", "active": true},
+        {"name": "Krebs on Security", "url": "https://krebsonsecurity.com/feed/", "active": true},
+        {"name": "F5 Labs", "url": "https://www.f5.com/labs/articles.rss.xml", "active": true},
+        {"name": "CrowdStrike Blog", "url": "https://www.crowdstrike.com/blog/feed/", "active": true},
+        {"name": "Palo Alto Networks", "url": "https://unit42.paloaltonetworks.com/feed/", "active": true},
+        {"name": "CyberScoop", "url": "https://www.cyberscoop.com/feed/", "active": true}
     ]
 }
