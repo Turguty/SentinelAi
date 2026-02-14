@@ -102,18 +102,23 @@ def analyze_news():
     cursor = conn.cursor()
     cursor.execute("SELECT ai_analysis FROM news WHERE link = ?", (link,))
     existing = cursor.fetchone()
-    if existing and existing[0]:
+    
+    # Eğer önceden analiz varsa VE bu analiz bir hata mesajı DEĞİLSE mevcut olanı dön
+    if existing and existing[0] and not existing[0].startswith("HATA:"):
         conn.close()
         return jsonify({"analysis": existing[0]})
 
     prompt = f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ile başla.\nHaber: {title}\nLink: {link}"
     analysis_result = ai_manager.analyze(prompt)
 
-    if "HATA:" not in analysis_result:
+    # Eğer yeni analiz başarılıysa veritabanını güncelle
+    if analysis_result and not analysis_result.startswith("HATA:"):
         cursor.execute("UPDATE news SET ai_analysis = ? WHERE link = ?", (analysis_result, link))
         conn.commit()
+    
     conn.close()
     return jsonify({"analysis": analysis_result})
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

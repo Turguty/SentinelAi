@@ -106,8 +106,12 @@ def fetch_rss():
                     telegram_msg = f"📰 *Yeni Siber Güvenlik Haberi*\n\n*Başlık:* {title}\n\n*AI Analizi:*\n{analysis}\n\n[Habere Git]({link})"
                     send_telegram_message(telegram_msg)
 
+                # AI servislerini yormamak için kısa bir mola
+                time.sleep(3)
+
             except Exception as e:
                 print(f"[Hata] Kayit hatasi: {e}")
+
         
     conn.close()
     print("[Tamam] Tarama ve analiz tamamlandi.")

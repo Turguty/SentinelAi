@@ -27,7 +27,12 @@ class AIManager:
         for service in self.order:
             if not self.keys.get(service) and service != "huggingface": continue
             if current_time < self.cooldowns[service]: continue
+            
             try:
+                # Add a small delay before calling the next service to prevent rapid-fire failures
+                time.sleep(1.5) 
+                
+                print(f"🤖 AI Servisi Deneniyor: {service.upper()}")
                 if service == "gemini": result = self._call_gemini(prompt)
                 elif service == "groq": result = self._call_groq(prompt)
                 elif service == "mistral": result = self._call_mistral(prompt)
@@ -39,9 +44,12 @@ class AIManager:
                 else:
                     raise Exception(result)
             except Exception as e:
+                print(f"⚠️ {service.upper()} Hatası: {str(e)}")
+                # Failures put the service on cooldown
                 self.cooldowns[service] = current_time + self.cooldown_duration
                 continue
         return "HATA: Tüm AI servisleri ulaşılamaz durumda."
+
 
     def _call_gemini(self, prompt):
         try:
