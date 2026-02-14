@@ -5,6 +5,10 @@ import os
 import time
 import requests
 from core.ai_manager import AIManager
+from core.logger import setup_logger
+
+# Loglama kurulumu
+logger = setup_logger("Fetcher")
 
 DB_PATH = 'data/sentinel.db'
 
@@ -12,9 +16,7 @@ DB_PATH = 'data/sentinel.db'
 KEYWORDS = ["Vakıfbank", "f5 waf", "crowdstrike", "paloalto", "twistlock", "guardicore", "vulnerability", "exploit", "cve"]
 
 def send_telegram_message(message):
-    """
-    Belirlenen mesajı .env içindeki BOT_TOKEN ve CHAT_ID'yi kullanarak Telegram'a gönderir.
-    """
+    """Belirlenen mesajı Telegram'a gönderir."""
     token = os.getenv('TELEGRAM_BOT_TOKEN')
     chat_id = os.getenv('TELEGRAM_CHAT_ID')
     if not token or not chat_id:
@@ -29,12 +31,10 @@ def send_telegram_message(message):
     try:
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"❌ Telegram Hatası: {e}")
+        logger.error(f"❌ Telegram Hatası: {e}")
 
 def init_db():
-    """
-    Veritabanı yapısını kontrol eder ve 'news' tablosunu oluşturur.
-    """
+    """Veritabanı yapısını kontrol eder ve tabloyu oluşturur."""
     if not os.path.exists('data'):
         os.makedirs('data')
     conn = sqlite3.connect(DB_PATH)
@@ -54,24 +54,19 @@ def init_db():
     conn.close()
 
 def process_missing_analysis():
-    """
-    Arka plan görevi: Veritabanında olup AI analizi henüz yapılmamış (veya hatalı kalmış)
-    haberleri tespit eder ve AI analizlerini tamamlar.
-    """
+    """Analizi henüz yapılmamış haberleri tespit eder ve tamamlar."""
     init_db()
     ai_manager = AIManager()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Analizi olmayan veya hata mesajı içerenleri seç (toplu işlem limitli)
     cursor.execute("SELECT id, title, link FROM news WHERE ai_analysis IS NULL OR ai_analysis LIKE 'HATA:%' LIMIT 10")
     missing_news = cursor.fetchall()
     
     if not missing_news:
-        conn.close()
         return
 
-    print(f"🧠 {len(missing_news)} eksik haber analiz ediliyor...")
+    logger.info(f"🧠 {len(missing_news)} eksik haber analiz ediliyor...")
     
     for row in missing_news:
         news_id, title, link = row
@@ -81,63 +76,62 @@ def process_missing_analysis():
         if analysis and not analysis.startswith("HATA:"):
             cursor.execute("UPDATE news SET ai_analysis = ? WHERE id = ?", (analysis, news_id))
             conn.commit()
-            time.sleep(3) # API limitlerini zorlamamak için mola
+            time.sleep(3) 
             
     conn.close()
 
 def fetch_rss():
-    """
-    Haber çekme ana motoru: Tüm RSS kaynaklarını tarar, yeni haberleri veritabanına kaydeder
-    ve kritik haberleri Telegram üzerinden bildirir.
-    """
+    """Tüm RSS kaynaklarını tarar ve yeni haberleri kaydeder."""
     init_db()
     ai_manager = AIManager()
     
-    with open('sources.json', 'r') as f:
-        sources = json.load(f)
+    try:
+        with open('sources.json', 'r') as f:
+            sources = json.load(f)
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
 
-    for source in sources['sources']:
-        if not source.get('active', True): continue
-        print(f"📡 Tarama başlatıldı: {source['name']}")
-        feed = feedparser.parse(source['url'])
-        
-        for entry in feed.entries:
-            title = entry.title
-            link = entry.link
+        for source in sources['sources']:
+            if not source.get('active', True): continue
+            logger.info(f"📡 Tarama başlatıldı: {source['name']}")
+            feed = feedparser.parse(source['url'])
             
-            # Veritabanında var mı kontrol et (Daha önce kaydedilmişse geç)
-            cursor.execute("SELECT id FROM news WHERE link = ?", (link,))
-            if cursor.fetchone(): continue
-
-            print(f"💡 Yeni haber bulundu: {title[:70]}...")
-            
-            # Anlık analiz
-            prompt = f"Kısa bir tehdit analizi yap:\nHaberi: {title}"
-            analysis = ai_manager.analyze(prompt)
-            
-            try:
-                cursor.execute(
-                    "INSERT INTO news (title, link, published, source, ai_analysis) VALUES (?, ?, ?, ?, ?)",
-                    (title, link, entry.get('published', 'Bilinmiyor'), source['name'], analysis)
-                )
-                conn.commit()
+            for entry in feed.entries:
+                title = entry.title
+                link = entry.link
                 
-                # Telegram Bildirimi (Kritiklik Kontrolü)
-                is_urgent = any(kw.lower() in title.lower() for kw in KEYWORDS)
-                header = "🚨 *KRİTİK HABER*" if is_urgent else "📰 *YENİ HABER*"
-                telegram_msg = f"{header}\n\n*Başlık:* {title}\n*Kaynak:* {source['name']}\n\n*AI:* {analysis[:300]}...\n\n[Habere Git]({link})"
-                send_telegram_message(telegram_msg)
+                cursor.execute("SELECT id FROM news WHERE link = ?", (link,))
+                if cursor.fetchone(): continue
 
-                time.sleep(3) # Rate limit koruması
+                logger.info(f"💡 Yeni haber bulundu: {title[:70]}...")
+                
+                # Anlık analiz
+                prompt = f"Kısa bir tehdit analizi yap:\nHaberi: {title}"
+                analysis = ai_manager.analyze(prompt)
+                
+                try:
+                    cursor.execute(
+                        "INSERT INTO news (title, link, published, source, ai_analysis) VALUES (?, ?, ?, ?, ?)",
+                        (title, link, entry.get('published', 'Bilinmiyor'), source['name'], analysis)
+                    )
+                    conn.commit()
+                    
+                    # Telegram Bildirimi
+                    is_urgent = any(kw.lower() in title.lower() for kw in KEYWORDS)
+                    header = "🚨 *KRİTİK HABER*" if is_urgent else "📰 *YENİ HABER*"
+                    telegram_msg = f"{header}\n\n*Başlık:* {title}\n*Kaynak:* {source['name']}\n\n*AI:* {analysis[:300]}...\n\n[Habere Git]({link})"
+                    send_telegram_message(telegram_msg)
 
-            except Exception as e:
-                print(f"❌ Kayıt Hatası: {e}")
+                    time.sleep(3) 
+
+                except Exception as e:
+                    logger.error(f"❌ Kayıt Hatası: {e}")
         
-    conn.close()
-    print("✨ Tarama ve analiz süreci tamamlandı.")
+        conn.close()
+        logger.info("✨ Tarama ve analiz süreci tamamlandı.")
+    except Exception as e:
+        logger.error(f"RSS Tarama Hatası: {e}")
 
 if __name__ == "__main__":
     fetch_rss()

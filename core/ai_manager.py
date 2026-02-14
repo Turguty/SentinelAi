@@ -5,6 +5,10 @@ from dotenv import load_dotenv
 from google import genai
 from groq import Groq
 from mistralai import Mistral
+from core.logger import setup_logger
+
+# Loglama kurulumu
+logger = setup_logger("AIManager")
 
 # .env dosyasındaki API anahtarlarını yükle
 load_dotenv()
@@ -34,7 +38,6 @@ class AIManager:
     def get_status(self):
         """
         Her bir AI servisinin mevcut durumunu (aktif, soğumada, anahtar eksik) döner.
-        Dashbord üzerindeki durum çubuğu bu veriyi kullanır.
         """
         current_time = time.time()
         status = {}
@@ -50,11 +53,9 @@ class AIManager:
     def analyze(self, prompt):
         """
         Verilen metni (haber, CVE vb.) mevcut AI servislerini sırayla deneyerek analiz eder.
-        Kota aşımı veya hata durumunda otomatik olarak bir sonraki servise geçer.
         """
         current_time = time.time()
         for service in self.order:
-            # Anahtar kontrolü ve soğuma süresi denetimi
             if not self.keys.get(service) and service != "huggingface": continue
             if current_time < self.cooldowns[service]: continue
             
@@ -62,7 +63,7 @@ class AIManager:
                 # Servisler arası çok hızlı geçişi önlemek için kısa mola
                 time.sleep(1.5) 
                 
-                print(f"🤖 AI Deneniyor: {service.upper()}")
+                logger.info(f"🤖 AI Deneniyor: {service.upper()}")
                 if service == "gemini": result = self._call_gemini(prompt)
                 elif service == "groq": result = self._call_groq(prompt)
                 elif service == "mistral": result = self._call_mistral(prompt)
@@ -70,16 +71,18 @@ class AIManager:
                 elif service == "huggingface": result = self._call_huggingface(prompt)
                 
                 if result and "HATA:" not in result:
+                    logger.info(f"✅ {service.upper()} başarılı.")
                     return result
                 else:
                     raise Exception(result)
 
             except Exception as e:
-                print(f"⚠️ {service.upper()} Hatası: {str(e)}")
+                logger.warning(f"⚠️ {service.upper()} Hatası: {str(e)}")
                 # Hata alan servisi geçici olarak engelle (5 dk)
                 self.cooldowns[service] = current_time + self.cooldown_duration
                 continue
 
+        logger.error("❌ Tüm AI servisleri şu an ulaşılamaz durumda.")
         return "HATA: Tüm AI servisleri şu an ulaşılamaz durumda."
 
     def _call_gemini(self, prompt):
@@ -109,7 +112,7 @@ class AIManager:
             return f"HATA: {str(e)}"
 
     def _call_openrouter(self, prompt):
-        """OpenRouter üzerinden belirlenen modelleri (Gemini vb) çağıran yedek kanal."""
+        """OpenRouter üzerinden belirlenen modelleri çağıran yedek kanal."""
         try:
             headers = {"Authorization": f"Bearer {self.keys['openrouter']}", "Content-Type": "application/json"}
             payload = {"model": "google/gemini-2.0-flash-001", "messages": [{"role": "user", "content": prompt}]}
@@ -121,7 +124,7 @@ class AIManager:
             return f"HATA: {str(e)}"
 
     def _call_huggingface(self, prompt):
-        """Hugging Face Inference API üzerinden (Qwen vb) açık kaynak modelleri çağırır."""
+        """Hugging Face Inference API üzerinden açık kaynak modelleri çağırır."""
         try:
             model = "Qwen/Qwen2.5-72B-Instruct"
             url = f"https://api-inference.huggingface.co/models/{model}"

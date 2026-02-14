@@ -30,6 +30,11 @@ jobs:
         # Sözdizimi hatalarını denetle
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
+    - name: Test Otomasyonu (Pytest)
+      run: |
+        python -m pytest tests/
+
+
     - name: Docker Imaj Testi
       run: |
         docker build -t sentinel-ai:test .

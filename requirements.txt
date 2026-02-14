@@ -7,3 +7,5 @@ requests
 apscheduler
 python-dotenv
 dnspython
+pydantic
+pytest
