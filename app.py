@@ -230,32 +230,32 @@ def analyze_ip():
 
 @app.route('/api/dns', methods=['GET'])
 def analyze_dns():
-    """Domain için DNS (A) ve Name Server (NS) kayıtlarını sorgular."""
+    """Domain için DNS (A, NS, CNAME, MX, TXT) kayıtlarını sorgular."""
     domain = request.args.get('domain', '').strip()
     if not domain: return jsonify({"error": "Domain gerekli"}), 400
     
     import dns.resolver
     results = {"domain": domain, "records": {}}
+    record_types = ['A', 'NS', 'CNAME', 'MX', 'TXT']
     
     try:
-        # A Kayıtları
-        try:
-            a_records = dns.resolver.resolve(domain, 'A')
-            results["records"]["A"] = [str(r) for r in a_records]
-        except: results["records"]["A"] = []
-            
-        # NS Kayıtları
-        try:
-            ns_records = dns.resolver.resolve(domain, 'NS')
-            results["records"]["NS"] = [str(r) for r in ns_records]
-        except: results["records"]["NS"] = []
+        for rtype in record_types:
+            try:
+                answers = dns.resolver.resolve(domain, rtype)
+                results["records"][rtype] = [str(r) for r in answers]
+            except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+                results["records"][rtype] = []
+            except Exception:
+                results["records"][rtype] = []
 
-        if not results["records"]["A"] and not results["records"]["NS"]:
-            return jsonify({"error": "Kayıt bulunamadı veya geçersiz domain"}), 404
+        # Hiç kayıt bulunamadıysa hata dön
+        if not any(results["records"].values()):
+            return jsonify({"error": "Hiçbir DNS kaydı bulunamadı"}), 404
 
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
 

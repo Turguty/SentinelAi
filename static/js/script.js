@@ -163,12 +163,28 @@ async function queryDNS() {
                 <div class="dns-result">
                     <h4>DNS Raporu: ${data.domain}</h4>
                     <hr>
-                    <h5>🌐 A Kayıtları (IP Adresleri)</h5>
-                    <ul>${data.records.A.length ? data.records.A.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt bulunamadı</li>'}</ul>
-                    <br>
-                    <h5>🔀 Name Server (NS) Kayıtları</h5>
-                    <ul>${data.records.NS.length ? data.records.NS.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt bulunamadı</li>'}</ul>
+                    <div class="dns-section">
+                        <h5>🌐 A Kayıtları (IP)</h5>
+                        <ul>${data.records.A.length ? data.records.A.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                    </div>
+                    <div class="dns-section">
+                        <h5>📧 MX Kayıtları (Mail)</h5>
+                        <ul>${data.records.MX.length ? data.records.MX.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                    </div>
+                    <div class="dns-section">
+                        <h5>🔗 CNAME Kayıtları</h5>
+                        <ul>${data.records.CNAME.length ? data.records.CNAME.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                    </div>
+                    <div class="dns-section">
+                        <h5>📝 TXT Kayıtları</h5>
+                        <ul>${data.records.TXT.length ? data.records.TXT.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                    </div>
+                    <div class="dns-section">
+                        <h5>🔀 Name Server (NS)</h5>
+                        <ul>${data.records.NS.length ? data.records.NS.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                    </div>
                 </div>`;
+
         }
     } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
 }
