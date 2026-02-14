@@ -145,7 +145,36 @@ async function updateStats() {
     } catch (e) { console.error("Grafik hatası:", e); }
 }
 
+async function queryDNS() {
+    const domain = document.getElementById('dns-input').value.trim();
+    if (!domain) return alert("Lütfen bir domain girin");
+
+    document.getElementById('analysis-panel').classList.remove('hidden');
+    const display = document.getElementById('analysis-text');
+    display.innerHTML = `🔍 <b>${domain}</b> DNS kayıtları sorgulanıyor...`;
+
+    try {
+        const res = await fetch(`/api/dns?domain=${domain}`);
+        const data = await res.json();
+        if (data.error) {
+            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+        } else {
+            display.innerHTML = `
+                <div class="dns-result">
+                    <h4>DNS Raporu: ${data.domain}</h4>
+                    <hr>
+                    <h5>🌐 A Kayıtları (IP Adresleri)</h5>
+                    <ul>${data.records.A.length ? data.records.A.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt bulunamadı</li>'}</ul>
+                    <br>
+                    <h5>🔀 Name Server (NS) Kayıtları</h5>
+                    <ul>${data.records.NS.length ? data.records.NS.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt bulunamadı</li>'}</ul>
+                </div>`;
+        }
+    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+}
+
 async function analyzeNews(title, link) {
+
     document.getElementById('analysis-panel').classList.remove('hidden');
     document.getElementById('analysis-text').innerText = "Analiz ediliyor...";
     try {

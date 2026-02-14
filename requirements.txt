@@ -6,3 +6,4 @@ feedparser
 requests
 apscheduler
 python-dotenv
+dnspython

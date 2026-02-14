@@ -213,6 +213,36 @@ def analyze_ip():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/dns', methods=['GET'])
+def analyze_dns():
+    """Domain için DNS (A) ve Name Server (NS) kayıtlarını sorgular."""
+    domain = request.args.get('domain', '').strip()
+    if not domain: return jsonify({"error": "Domain gerekli"}), 400
+    
+    import dns.resolver
+    results = {"domain": domain, "records": {}}
+    
+    try:
+        # A Kayıtları
+        try:
+            a_records = dns.resolver.resolve(domain, 'A')
+            results["records"]["A"] = [str(r) for r in a_records]
+        except: results["records"]["A"] = []
+            
+        # NS Kayıtları
+        try:
+            ns_records = dns.resolver.resolve(domain, 'NS')
+            results["records"]["NS"] = [str(r) for r in ns_records]
+        except: results["records"]["NS"] = []
+
+        if not results["records"]["A"] and not results["records"]["NS"]:
+            return jsonify({"error": "Kayıt bulunamadı veya geçersiz domain"}), 404
+
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
+
 
     app.run(host='0.0.0.0', port=5000, debug=True)
