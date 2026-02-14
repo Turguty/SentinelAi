@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
     <meta charset="UTF-8">
     <title>SentinelAi | SOC Dashboard</title>
@@ -8,6 +9,7 @@
     <script src="{{ url_for('static', filename='js/chart.min.js') }}"></script>
     <link rel="icon" href="data:,">
 </head>
+
 <body class="dark-theme">
     <nav class="navbar">
         <div class="nav-left">
@@ -18,9 +20,13 @@
 
         </div>
         <div class="nav-right">
+            <div id="ai-status-bar" class="ai-status-bar">
+                <!-- AI durumları buraya gelecek -->
+            </div>
             <button onclick="downloadWeeklyReport()" class="btn-report">📅 Haftalık Rapor İndir</button>
             <div class="status-indicator"><span class="dot"></span> Sistem Aktif</div>
         </div>
+
     </nav>
 
     <main class="container">
@@ -53,7 +59,9 @@
         </section>
 
         <section class="feed-section">
-            <div class="section-header"><h2>Güncel Tehdit Akışı</h2></div>
+            <div class="section-header">
+                <h2>Güncel Tehdit Akışı</h2>
+            </div>
             <div id="news-feed" class="news-grid"></div>
             <div id="pagination-container" class="pagination-wrapper"></div>
         </section>
@@ -73,4 +81,5 @@
     </main>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
+
 </html>

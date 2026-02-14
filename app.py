@@ -35,7 +35,13 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+@app.route('/api/ai_status', methods=['GET'])
+def get_ai_status():
+    """Hangi AI servislerinin aktif olduğunu döner."""
+    return jsonify(ai_manager.get_status())
+
 @app.route('/api/news', methods=['GET'])
+
 def get_news():
     """
     Kayıtlı haberleri getirir. Sayfalama ve arama filtrelerini destekler.
@@ -151,18 +157,22 @@ def analyze_cve():
             summary = data.get('summary', 'Açıklama bulunamadı.')
             cvss = data.get('cvss', 'Bilinmiyor')
             
+            # Eğer özet yoksa AI'ya sadece ID üzerinden genel bilgi sormasını söyle
+            context = f"Özet: {summary}" if summary != "Açıklama bulunamadı." else f"Bu CVE ID ({cve_id}) hakkında bildiğin genel bilgileri ve genel siber güvenlik prensiplerini kullanarak analiz yap."
+
             prompt = (
                 f"Şu CVE hakkında detaylı teknik analiz yap ve siber güvenlik uzmanı olarak yorumla:\n\n"
                 f"CVE ID: {cve_id}\n"
                 f"CVSS Skoru: {cvss}\n"
-                f"Özet: {summary}\n\n"
+                f"{context}\n\n"
                 f"Lütfen şunları açıkla:\n"
-                f"1. Zafiyetin ciddiyeti\n"
-                f"2. Olası saldırı senaryosu\n"
-                f"3. Acil alınması gereken önlemler\n"
+                f"1. Zafiyetin genel ciddiyeti (CVSS'ye göre)\n"
+                f"2. Bu tip zafiyetler için olası saldırı senaryosu\n"
+                f"3. Savunma stratejileri ve acil aksiyonlar\n"
                 f"Cevap dili: Türkçe"
             )
             ai_comment = ai_manager.analyze(prompt)
+
             
             return jsonify({
                 "id": cve_id,

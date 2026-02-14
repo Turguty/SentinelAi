@@ -267,7 +267,40 @@ html, body {
 
 
 .dot { height: 8px; width: 8px; background-color: var(--success); border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+/* AI Status Bar Styles */
+.ai-status-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: rgba(0,0,0,0.2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+}
+
+.ai-status-item {
+    display: flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    gap: 4px;
+    color: var(--text-secondary);
+}
+
+.ai-status-dot {
+    height: 6px;
+    width: 6px;
+    border-radius: 50%;
+}
+
+.ai-status-dot.active { background-color: var(--success); box-shadow: 0 0 5px var(--success); }
+.ai-status-dot.cooldown { background-color: var(--danger); box-shadow: 0 0 5px var(--danger); }
+.ai-status-dot.no_key { background-color: #6b7280; } /* Grey */
+
 .hidden { display: none; }
+
 
 /* Rapor Butonu Tasarımı */
 .btn-report {

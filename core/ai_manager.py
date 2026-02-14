@@ -22,7 +22,21 @@ class AIManager:
         self.cooldowns = {service: 0 for service in self.order}
         self.cooldown_duration = 300 
 
+    def get_status(self):
+        """Servislerin durumunu döner: 'active', 'cooldown', 'no_key'"""
+        current_time = time.time()
+        status = {}
+        for service in self.order:
+            if not self.keys.get(service) and service != "huggingface":
+                status[service] = "no_key"
+            elif current_time < self.cooldowns[service]:
+                status[service] = "cooldown"
+            else:
+                status[service] = "active"
+        return status
+
     def analyze(self, prompt):
+
         current_time = time.time()
         for service in self.order:
             if not self.keys.get(service) and service != "huggingface": continue

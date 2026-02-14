@@ -4,7 +4,31 @@ let sourceChart = null;
 document.addEventListener('DOMContentLoaded', () => {
     fetchNews(1);
     updateStats();
+    updateAIStatus();
+    // Her 30 saniyede bir AI durumunu güncelle
+    setInterval(updateAIStatus, 30000);
 });
+
+async function updateAIStatus() {
+    try {
+        const res = await fetch('/api/ai_status');
+        const data = await res.json();
+        const statusBar = document.getElementById('ai-status-bar');
+        statusBar.innerHTML = '';
+
+        for (const [service, status] of Object.entries(data)) {
+            const item = document.createElement('div');
+            item.className = 'ai-status-item';
+            item.title = status === 'active' ? 'Aktif' : (status === 'cooldown' ? 'Soğuma Modunda' : 'Anahtar Yok');
+            item.innerHTML = `
+                <span class="ai-status-dot ${status}"></span>
+                ${service.charAt(0).toUpperCase() + service.slice(1, 3)}
+            `;
+            statusBar.appendChild(item);
+        }
+    } catch (e) { console.error("AI durum güncelleme hatası:", e); }
+}
+
 
 async function fetchNews(page = 1) {
     currentPage = page;
