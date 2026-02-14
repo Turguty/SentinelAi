@@ -136,5 +136,63 @@ async function analyzeNews(title, link) {
     } catch (e) { document.getElementById('analysis-text').innerText = "Hata oluştu."; }
 }
 
+async function queryCVE() {
+    const cveId = document.getElementById('cve-input').value.trim();
+    if (!cveId) return alert("Lütfen bir CVE ID girin (Örn: CVE-2024-1234)");
+
+    document.getElementById('analysis-panel').classList.remove('hidden');
+    const display = document.getElementById('analysis-text');
+    display.innerHTML = `<div class="loading">🔍 <b>${cveId}</b> araştırılıyor ve AI analizi hazırlanıyor...</div>`;
+
+    try {
+        const res = await fetch(`/api/cve?id=${cveId}`);
+        const data = await res.json();
+        if (data.error) {
+            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+        } else {
+            display.innerHTML = `
+                <div class="cve-result">
+                    <h4>${data.id} Analysis</h4>
+                    <p><b>CVSS:</b> <span class="badge-${parseFloat(data.cvss) > 7 ? 'critical' : 'medium'}">${data.cvss}</span></p>
+                    <p><b>Özet:</b> ${data.summary}</p>
+                    <hr>
+                    <div class="ai-commentary">
+                        <h5>🧠 AI Güvenlik Analizi</h5>
+                        ${data.ai_comment.replace(/\n/g, '<br>')}
+                    </div>
+                </div>`;
+        }
+    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+}
+
+async function queryIP() {
+    const ip = document.getElementById('ip-input').value.trim();
+    if (!ip) return alert("Lütfen bir IP adresi girin");
+
+    document.getElementById('analysis-panel').classList.remove('hidden');
+    const display = document.getElementById('analysis-text');
+    display.innerHTML = `🔍 <b>${ip}</b> sorgulanıyor...`;
+
+    try {
+        const res = await fetch(`/api/ip?ip=${ip}`);
+        const data = await res.json();
+        if (data.error) {
+            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+        } else {
+            display.innerHTML = `
+                <div class="ip-result">
+                    <h4>IP İstihbarat Raporu: ${data.ip}</h4>
+                    <p>📍 <b>Konum:</b> ${data.location}</p>
+                    <p>🏢 <b>Servis Sağlayıcı (ISP):</b> ${data.isp}</p>
+                    <p>🏭 <b>Organizasyon:</b> ${data.org}</p>
+                    <p>🛡️ <b>AS:</b> ${data.as}</p>
+                </div>`;
+        }
+    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+}
+
 function closeAnalysis() { document.getElementById('analysis-panel').classList.add('hidden'); }
-function searchNews() { fetchNews(1); }
+function searchNews(e, page = 1) {
+    if (e && e.type === 'keyup' && e.key !== 'Enter') return;
+    fetchNews(page);
+}

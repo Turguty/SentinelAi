@@ -54,7 +54,44 @@ def init_db():
     conn.commit()
     conn.close()
 
+def process_missing_analysis():
+    """
+    Veritabanında olup AI analizi olmayan haberleri bulur ve analiz eder.
+    """
+    init_db()
+    ai_manager = AIManager()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # AI analizi boş olan veya HATA ile başlayanları seç
+    cursor.execute("SELECT id, title, link, source FROM news WHERE ai_analysis IS NULL OR ai_analysis LIKE 'HATA:%' LIMIT 10")
+    missing_news = cursor.fetchall()
+    
+    if not missing_news:
+        print("[Bilgi] Analiz edilecek eksik haber bulunamadı.")
+        conn.close()
+        return
+
+    print(f"[Analiz] {len(missing_news)} adet eksik haber analiz ediliyor...")
+    
+    for row in missing_news:
+        news_id, title, link, source = row
+        prompt = f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ile başla.\nHaber: {title}\nLink: {link}"
+        analysis = ai_manager.analyze(prompt)
+        
+        if analysis and not analysis.startswith("HATA:"):
+            cursor.execute("UPDATE news SET ai_analysis = ? WHERE id = ?", (analysis, news_id))
+            conn.commit()
+            print(f"[Tamam] Analiz güncellendi: {title[:50]}...")
+            time.sleep(3)
+        else:
+            print(f"[Hata] Analiz alınamadı: {title[:50]}")
+            
+    conn.close()
+    print("[Tamam] Eksik analiz süreci bitti.")
+
 def fetch_rss():
+
     """
     sources.json içindeki tüm RSS kaynaklarını tarar, yeni haberleri AI ile analiz eder 
     ve Telegram üzerinden bilgilendirme yapar.

@@ -4,12 +4,27 @@ import time
 import requests
 from flask import Flask, render_template, request, jsonify
 from core.ai_manager import AIManager
+from core.fetcher import fetch_rss, process_missing_analysis
+from apscheduler.schedulers.background import BackgroundScheduler
+import atexit
 
 app = Flask(__name__)
 DB_PATH = 'data/sentinel.db'
 ai_manager = AIManager()
 
+# Arka Plan Görevleri (Scheduler)
+scheduler = BackgroundScheduler()
+# 15 dakikada bir yeni haberleri çek
+scheduler.add_job(func=fetch_rss, trigger="interval", minutes=15)
+# 5 dakikada bir eksik analizleri tamamla
+scheduler.add_job(func=process_missing_analysis, trigger="interval", minutes=5)
+scheduler.start()
+
+# Uygulama kapandığında scheduler'ı da kapat
+atexit.register(lambda: scheduler.shutdown())
+
 @app.route('/')
+
 def index():
     return render_template('index.html')
 
@@ -120,5 +135,70 @@ def analyze_news():
     return jsonify({"analysis": analysis_result})
 
 
+@app.route('/api/cve', methods=['GET'])
+def analyze_cve():
+    """CVE bilgilerini çeker ve AI ile yorumlar."""
+    cve_id = request.args.get('id', '').strip().upper()
+    if not cve_id: return jsonify({"error": "CVE ID gerekli"}), 400
+    
+    try:
+        # CIRCL CVE API kullanımı
+        res = requests.get(f"https://cve.circl.lu/api/cve/{cve_id}", timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            if not data: return jsonify({"error": "CVE bulunamadı"}), 404
+            
+            summary = data.get('summary', 'Açıklama bulunamadı.')
+            cvss = data.get('cvss', 'Bilinmiyor')
+            
+            prompt = (
+                f"Şu CVE hakkında detaylı teknik analiz yap ve siber güvenlik uzmanı olarak yorumla:\n\n"
+                f"CVE ID: {cve_id}\n"
+                f"CVSS Skoru: {cvss}\n"
+                f"Özet: {summary}\n\n"
+                f"Lütfen şunları açıkla:\n"
+                f"1. Zafiyetin ciddiyeti\n"
+                f"2. Olası saldırı senaryosu\n"
+                f"3. Acil alınması gereken önlemler\n"
+                f"Cevap dili: Türkçe"
+            )
+            ai_comment = ai_manager.analyze(prompt)
+            
+            return jsonify({
+                "id": cve_id,
+                "summary": summary,
+                "cvss": cvss,
+                "ai_comment": ai_comment,
+                "references": data.get('references', [])[:5]
+            })
+        return jsonify({"error": "CVE servisine ulaşılamadı"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/ip', methods=['GET'])
+def analyze_ip():
+    """IP adresi hakkında istihbarat toplar."""
+    ip = request.args.get('ip', '').strip()
+    if not ip: return jsonify({"error": "IP adresi gerekli"}), 400
+    
+    try:
+        # IP-API kullanımı (Ücretsiz ve basit)
+        res = requests.get(f"http://ip-api.com/json/{ip}?fields=status,message,country,city,isp,org,as,query", timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            if data['status'] == 'fail': return jsonify({"error": "IP bilgisi alınamadı"}), 404
+            
+            return jsonify({
+                "ip": data['query'],
+                "location": f"{data.get('city')}, {data.get('country')}",
+                "isp": data.get('isp'),
+                "org": data.get('org'),
+                "as": data.get('as')
+            })
+        return jsonify({"error": "IP servisine ulaşılamadı"}), 502
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
+
     app.run(host='0.0.0.0', port=5000, debug=True)
