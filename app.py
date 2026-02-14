@@ -2,9 +2,24 @@ import os
 import sqlite3
 import time
 import requests
+import subprocess
+import sys
 from dotenv import load_dotenv
 
+def auto_install_requirements():
+    """requirements.txt dosyasındaki bağımlılıkları kontrol eder ve eksik olanları yükler."""
+    try:
+        print("📦 Bağımlılıklar kontrol ediliyor...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        print("✅ Tüm bağımlılıklar güncel.")
+    except Exception as e:
+        print(f"❌ Bağımlılık yükleme hatası: {e}")
+
+# Uygulama başlamadan önce bağımlılıkları yükle
+auto_install_requirements()
+
 load_dotenv()
+
 
 from flask import Flask, render_template, request, jsonify
 from core.ai_manager import AIManager
