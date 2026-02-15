@@ -23,8 +23,13 @@
             <div id="ai-status-bar" class="ai-status-bar">
                 <!-- AI durumları buraya gelecek -->
             </div>
+            <div id="system-health" class="system-health">
+                <span>CPU: <b id="cpu-val">0%</b></span>
+                <span>RAM: <b id="ram-val">0%</b></span>
+            </div>
             <button onclick="downloadWeeklyReport()" class="btn-report">📅 Haftalık Rapor İndir</button>
             <div class="status-indicator"><span class="dot"></span> Sistem Aktif</div>
+
         </div>
 
     </nav>
@@ -39,7 +44,12 @@
                 <h4>Haber Yoğunluğu</h4>
                 <canvas id="barChart"></canvas>
             </div>
+            <div class="chart-card" style="grid-column: span 2; height: 350px;">
+                <h4>Yapay Zeka Tehdit Kategorileri</h4>
+                <canvas id="categoryChart"></canvas>
+            </div>
         </section>
+
 
         <section class="tools-container">
             <div class="tool-card">
@@ -63,7 +73,15 @@
                     <button onclick="queryDNS()">Sorgula</button>
                 </div>
             </div>
+            <div class="tool-card">
+                <h4>WHOIS Sorgulama</h4>
+                <div class="tool-input-group">
+                    <input type="text" id="whois-input" placeholder="google.com">
+                    <button onclick="queryWhois()">Sorgula</button>
+                </div>
+            </div>
         </section>
+
 
 
         <section class="feed-section">

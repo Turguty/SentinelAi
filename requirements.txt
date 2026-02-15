@@ -9,3 +9,9 @@ python-dotenv
 dnspython
 pydantic
 pytest
+flask-limiter
+python-whois
+psutil
+
+
+

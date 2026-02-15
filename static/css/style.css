@@ -10,7 +10,8 @@
 }
 
 /* 1. Global Sabitleme ve Arka Plan Gradiyenti */
-html, body {
+html,
+body {
     background: radial-gradient(circle at top, #111827 0%, #0b0e11 100%) !important;
     color: var(--text-primary) !important;
     font-family: 'Inter', sans-serif;
@@ -25,28 +26,56 @@ html, body {
     justify-content: space-between;
     align-items: center;
     padding: 0.8rem 0;
-    max-width: 900px; /* İçerik ile tam hizalı */
+    max-width: 900px;
+    /* İçerik ile tam hizalı */
     margin: 0 auto;
-    
+
     /* Kritik Düzeltmeler */
-    background-color: var(--bg-color) !important; /* Arka planı şeffaf değil, siyah yapar */
-    position: sticky; /* Sayfayı kaydırınca en üstte kalır */
+    background-color: var(--bg-color) !important;
+    /* Arka planı şeffaf değil, siyah yapar */
+    position: sticky;
+    /* Sayfayı kaydırınca en üstte kalır */
     top: 0;
-    z-index: 1000; /* Diğer tüm içeriklerin üstünde kalmasını sağlar */
+    z-index: 1000;
+    /* Diğer tüm içeriklerin üstünde kalmasını sağlar */
     border-bottom: 1px solid var(--border);
-    
+
     /* Kaydırma esnasında daha iyi ayrışma için hafif gölge (isteğe bağlı) */
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); 
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
-.nav-left, .nav-right {
+.nav-left,
+.nav-right {
     display: flex;
     align-items: center;
     gap: 20px;
 }
 
-.logo { font-weight: 600; letter-spacing: 2px; font-size: 1.1rem; }
-.logo span { color: var(--accent); }
+.system-health {
+    display: flex;
+    gap: 15px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.system-health b {
+    color: var(--accent);
+}
+
+
+.logo {
+    font-weight: 600;
+    letter-spacing: 2px;
+    font-size: 1.1rem;
+}
+
+.logo span {
+    color: var(--accent);
+}
 
 .search-container input {
     background: #0b0e11 !important;
@@ -67,7 +96,8 @@ html, body {
 /* Navbar'ın altındaki içeriğin üzerine binmemesi için konteynere üst boşluk ekle */
 .container {
     max-width: 900px;
-    margin: 1rem auto; /* Üst boşluk ayarlandı */
+    margin: 1rem auto;
+    /* Üst boşluk ayarlandı */
     padding: 0 1rem;
     display: flex;
     flex-direction: column;
@@ -146,7 +176,10 @@ html, body {
 }
 
 /* 6. Haber Kartları ve Buton Sabitleme */
-.news-grid { display: grid; gap: 1.2rem; }
+.news-grid {
+    display: grid;
+    gap: 1.2rem;
+}
 
 .news-card {
     background: var(--card-bg);
@@ -168,7 +201,8 @@ html, body {
     margin-top: 20px;
 }
 
-.btn-link, .btn-analyze {
+.btn-link,
+.btn-analyze {
     display: inline-flex !important;
     align-items: center;
     gap: 8px;
@@ -181,8 +215,17 @@ html, body {
     border: 1px solid transparent;
 }
 
-.btn-link { background: rgba(59, 130, 246, 0.1); color: var(--accent); border-color: var(--accent); }
-.btn-analyze { background: rgba(16, 185, 129, 0.1); color: var(--success); border-color: var(--success); }
+.btn-link {
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.btn-analyze {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+    border-color: var(--success);
+}
 
 /* 7. Analiz Paneli ve X Butonu (Mutlak Konumlandırma) */
 .analysis-panel {
@@ -195,7 +238,7 @@ html, body {
     border-left: 1px solid var(--border);
     padding: 2.5rem;
     z-index: 2000;
-    box-shadow: -15px 0 35px rgba(0,0,0,0.6);
+    box-shadow: -15px 0 35px rgba(0, 0, 0, 0.6);
     overflow-y: auto;
 }
 
@@ -218,7 +261,9 @@ html, body {
     line-height: 0.5;
 }
 
-.btn-close-panel:hover { color: var(--danger); }
+.btn-close-panel:hover {
+    color: var(--danger);
+}
 
 .btn-pdf-modern {
     width: 100%;
@@ -266,14 +311,21 @@ html, body {
 }
 
 
-.dot { height: 8px; width: 8px; background-color: var(--success); border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot {
+    height: 8px;
+    width: 8px;
+    background-color: var(--success);
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+}
 
 /* AI Status Bar Styles */
 .ai-status-bar {
     display: flex;
     gap: 8px;
     align-items: center;
-    background: rgba(0,0,0,0.2);
+    background: rgba(0, 0, 0, 0.2);
     padding: 4px 10px;
     border-radius: 20px;
     border: 1px solid var(--border);
@@ -295,11 +347,25 @@ html, body {
     border-radius: 50%;
 }
 
-.ai-status-dot.active { background-color: var(--success); box-shadow: 0 0 5px var(--success); }
-.ai-status-dot.cooldown { background-color: var(--danger); box-shadow: 0 0 5px var(--danger); }
-.ai-status-dot.no_key { background-color: #6b7280; } /* Grey */
+.ai-status-dot.active {
+    background-color: var(--success);
+    box-shadow: 0 0 5px var(--success);
+}
 
-.hidden { display: none; }
+.ai-status-dot.cooldown {
+    background-color: var(--danger);
+    box-shadow: 0 0 5px var(--danger);
+}
+
+.ai-status-dot.no_key {
+    background-color: #6b7280;
+}
+
+/* Grey */
+
+.hidden {
+    display: none;
+}
 
 
 /* Rapor Butonu Tasarımı */
@@ -323,9 +389,18 @@ html, body {
 
 
 /* Tehdit Seviyesi İndikatörleri */
-.news-card.critical { border-left: 5px solid var(--danger) !important; }
-.news-card.medium { border-left: 5px solid #f59e0b !important; } /* Turuncu */
-.news-card.low { border-left: 5px solid var(--success) !important; }
+.news-card.critical {
+    border-left: 5px solid var(--danger) !important;
+}
+
+.news-card.medium {
+    border-left: 5px solid #f59e0b !important;
+}
+
+/* Turuncu */
+.news-card.low {
+    border-left: 5px solid var(--success) !important;
+}
 
 /* Kart içindeki seviye etiketi (Badge) */
 .threat-badge {
@@ -338,12 +413,24 @@ html, body {
     margin-bottom: 10px;
 }
 
-.badge-critical { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
-.badge-medium { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-.badge-low { background: rgba(16, 185, 129, 0.2); color: var(--success); }
+.badge-critical {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger);
+}
+
+.badge-medium {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+.badge-low {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+}
 
 /* --- Mobil Uyumluluk (Media Queries) --- */
 @media (max-width: 768px) {
+
     /* 1. Navigasyon Düzenlemesi */
     .navbar {
         flex-direction: column;
@@ -353,7 +440,8 @@ html, body {
         text-align: center;
     }
 
-    .nav-left, .nav-right {
+    .nav-left,
+    .nav-right {
         flex-direction: column;
         width: 100%;
         gap: 10px;
@@ -376,14 +464,16 @@ html, body {
         max-width: 100%;
     }
 
-    .charts-container, 
+    .charts-container,
     .tools-container {
-        grid-template-columns: 1fr !important; /* Yan yana olan her şeyi alt alta alır */
+        grid-template-columns: 1fr !important;
+        /* Yan yana olan her şeyi alt alta alır */
         gap: 1rem;
     }
 
     .chart-card {
-        height: 280px; /* Mobilde biraz daha kısa grafikler */
+        height: 280px;
+        /* Mobilde biraz daha kısa grafikler */
     }
 
     /* 3. Haber Kartları ve Butonlar */
@@ -392,17 +482,21 @@ html, body {
     }
 
     .card-actions {
-        flex-wrap: wrap; /* Butonlar sığmazsa alt satıra geçer */
+        flex-wrap: wrap;
+        /* Butonlar sığmazsa alt satıra geçer */
     }
 
-    .btn-link, .btn-analyze {
-        flex: 1; /* Butonların genişliğini eşitler */
+    .btn-link,
+    .btn-analyze {
+        flex: 1;
+        /* Butonların genişliğini eşitler */
         justify-content: center;
     }
 
     /* 4. Analiz Yan Paneli (Tam Ekran Modu) */
     .analysis-panel {
-        width: 100% !important; /* Mobilde tüm ekranı kaplar */
+        width: 100% !important;
+        /* Mobilde tüm ekranı kaplar */
         padding: 1.5rem;
     }
 

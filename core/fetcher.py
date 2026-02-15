@@ -47,9 +47,11 @@ def init_db():
             published TEXT,
             source TEXT,
             ai_analysis TEXT,
+            category TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+
     conn.commit()
     conn.close()
 
@@ -70,11 +72,20 @@ def process_missing_analysis():
     
     for row in missing_news:
         news_id, title, link = row
-        prompt = f"Şu haberi teknik olarak analiz et:\n{title}\nLink: {link}"
+        prompt = (
+            f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ve 'KATEGORI: [Malware/Phishing/Ransomware/Vulnerability/Breach/General]' ile başla.\n"
+            f"Haber: {title}\nLink: {link}"
+        )
         analysis = ai_manager.analyze(prompt)
         
         if analysis and not analysis.startswith("HATA:"):
-            cursor.execute("UPDATE news SET ai_analysis = ? WHERE id = ?", (analysis, news_id))
+            # Kategoriyi ayıkla
+            category = "General"
+            if "KATEGORI:" in analysis:
+                try: category = analysis.split("KATEGORI:")[1].split("]")[0].replace("[", "").strip()
+                except: pass
+
+            cursor.execute("UPDATE news SET ai_analysis = ?, category = ? WHERE id = ?", (analysis, category, news_id))
             conn.commit()
             time.sleep(3) 
             
@@ -107,13 +118,22 @@ def fetch_rss():
                 logger.info(f"💡 Yeni haber bulundu: {title[:70]}...")
                 
                 # Anlık analiz
-                prompt = f"Kısa bir tehdit analizi yap:\nHaberi: {title}"
+                prompt = (
+                    f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ve 'KATEGORI: [Malware/Phishing/Ransomware/Vulnerability/Breach/General]' ile başla.\n"
+                    f"Haberi: {title}"
+                )
                 analysis = ai_manager.analyze(prompt)
                 
+                # Kategoriyi ayıkla
+                category = "General"
+                if analysis and "KATEGORI:" in analysis:
+                    try: category = analysis.split("KATEGORI:")[1].split("]")[0].replace("[", "").strip()
+                    except: pass
+
                 try:
                     cursor.execute(
-                        "INSERT INTO news (title, link, published, source, ai_analysis) VALUES (?, ?, ?, ?, ?)",
-                        (title, link, entry.get('published', 'Bilinmiyor'), source['name'], analysis)
+                        "INSERT INTO news (title, link, published, source, ai_analysis, category) VALUES (?, ?, ?, ?, ?, ?)",
+                        (title, link, entry.get('published', 'Bilinmiyor'), source['name'], analysis, category)
                     )
                     conn.commit()
                     

@@ -1,5 +1,6 @@
-let currentPage = 1;
 let sourceChart = null;
+let categoryChart = null;
+let barChart = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchNews(1);
@@ -7,7 +8,24 @@ document.addEventListener('DOMContentLoaded', () => {
     updateAIStatus();
     // Her 30 saniyede bir AI durumunu güncelle
     setInterval(updateAIStatus, 30000);
+    updateSystemHealth();
+    setInterval(updateSystemHealth, 10000);
 });
+
+async function updateSystemHealth() {
+    try {
+        const res = await fetch('/api/system/health');
+        const data = await res.json();
+        document.getElementById('cpu-val').innerText = `${data.cpu}%`;
+        document.getElementById('ram-val').innerText = `${data.ram}%`;
+
+        // Kritik durum kontrolü (Görsel uyarı)
+        document.getElementById('cpu-val').style.color = data.cpu > 80 ? '#ef4444' : '#3b82f6';
+        document.getElementById('ram-val').style.color = data.ram > 80 ? '#ef4444' : '#3b82f6';
+
+    } catch (e) { console.error("Sistem sağlık hatası:", e); }
+}
+
 
 async function updateAIStatus() {
     try {
@@ -142,7 +160,39 @@ async function updateStats() {
             }
         });
 
+        // 3. Tehdit Kategorileri (Horizontal Bar Chart)
+        const resCat = await fetch('/api/stats/categories');
+        const catData = await resCat.json();
+        const catLabels = catData.categories.map(c => c.category);
+        const catCounts = catData.categories.map(c => c.count);
+
+        const ctxCat = document.getElementById('categoryChart').getContext('2d');
+        if (categoryChart) categoryChart.destroy();
+        categoryChart = new Chart(ctxCat, {
+            type: 'bar',
+            data: {
+                labels: catLabels,
+                datasets: [{
+                    label: 'Olay Sayısı',
+                    data: catCounts,
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#90949a' } },
+                    y: { grid: { display: false }, ticks: { color: '#e1e1e1', font: { weight: 'bold' } } }
+                }
+            }
+        });
+
     } catch (e) { console.error("Grafik hatası:", e); }
+
 }
 
 async function queryDNS() {
@@ -189,7 +239,38 @@ async function queryDNS() {
     } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
 }
 
+async function queryWhois() {
+    const domain = document.getElementById('whois-input').value.trim();
+    if (!domain) return alert("Lütfen bir domain girin");
+
+    document.getElementById('analysis-panel').classList.remove('hidden');
+    const display = document.getElementById('analysis-text');
+    display.innerHTML = `🔍 <b>${domain}</b> WHOIS bilgileri çekiliyor...`;
+
+    try {
+        const res = await fetch(`/api/whois?domain=${domain}`);
+        const data = await res.json();
+        if (data.error) {
+            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+        } else {
+            display.innerHTML = `
+                <div class="whois-result">
+                    <h4>WHOIS Raporu: ${data.domain}</h4>
+                    <hr>
+                    <p><b>🏢 Kayıt Kuruluşu (Registrar):</b> ${data.registrar || 'Bilinmiyor'}</p>
+                    <p><b>📅 Oluşturulma:</b> ${data.creation_date}</p>
+                    <p><b>⌛ Bitiş:</b> ${data.expiration_date}</p>
+                    <p><b>📜 Durum:</b> ${data.status}</p>
+                    <br>
+                    <h5>🌐 Name Servers</h5>
+                    <ul>${data.name_servers.map(ns => `<li>${ns}</li>`).join('')}</ul>
+                </div>`;
+        }
+    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+}
+
 async function analyzeNews(title, link) {
+
 
     document.getElementById('analysis-panel').classList.remove('hidden');
     document.getElementById('analysis-text').innerText = "Analiz ediliyor...";
@@ -201,7 +282,24 @@ async function analyzeNews(title, link) {
         });
         const data = await res.json();
         document.getElementById('analysis-text').innerText = data.analysis;
+        // İndirme butonu ekle
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'btn-report';
+        downloadBtn.style.marginTop = '10px';
+        downloadBtn.innerText = '💾 Analizi İndir (.md)';
+        downloadBtn.onclick = () => {
+            const blob = new Blob([data.analysis], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sentinel-analiz-${new Date().getTime()}.md`;
+            a.click();
+        };
+        document.getElementById('analysis-text').appendChild(document.createElement('br'));
+        document.getElementById('analysis-text').appendChild(downloadBtn);
+
         fetchNews(currentPage);
+
     } catch (e) { document.getElementById('analysis-text').innerText = "Hata oluştu."; }
 }
 

@@ -5,7 +5,10 @@ import requests
 import subprocess
 import sys
 import atexit
+import psutil
 from flask import Flask, render_template, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from pydantic import BaseModel, ValidationError, Field
@@ -15,8 +18,8 @@ from typing import Optional
 from core.ai_manager import AIManager
 from core.fetcher import fetch_rss, process_missing_analysis
 from core.logger import setup_logger
+from core.cache import get_cache, set_cache
 
-# Loglama kurulumu
 logger = setup_logger("App")
 
 # .env dosyasındaki değişkenleri yükle
@@ -34,8 +37,19 @@ def auto_install_requirements():
 auto_install_requirements()
 
 app = Flask(__name__)
+
+# Hız Sınırlayıcı (Rate Limiter)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["500 per day", "100 per hour"],
+    storage_uri="memory://",
+)
+
 DB_PATH = 'data/sentinel.db'
 ai_manager = AIManager()
+start_time = time.time()
+
 
 # --- Veri Doğrulama Modelleri (Pydantic) ---
 class AnalyzeRequest(BaseModel):
@@ -52,7 +66,17 @@ class DnsRequest(BaseModel):
     domain: str = Field(..., min_length=3)
 
 
+@app.route('/api/system/health', methods=['GET'])
+def get_system_health():
+    """Sunucu CPU ve RAM kullanım bilgilerini döner."""
+    return jsonify({
+        "cpu": psutil.cpu_percent(),
+        "ram": psutil.virtual_memory().percent,
+        "uptime": int(time.time() - start_time)
+    })
+
 # Arka Plan Görevleri (Scheduler) Yapılandırması
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=fetch_rss, trigger="interval", minutes=15)
 scheduler.add_job(func=process_missing_analysis, trigger="interval", minutes=5)
@@ -144,7 +168,18 @@ def get_intensity():
     conn.close()
     return jsonify({"intensity": intensity})
 
+@app.route('/api/stats/categories', methods=['GET'])
+def get_category_stats():
+    """Haberlerin tehdit kategorilerine göre dağılımını döner."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT category, COUNT(*) as count FROM news WHERE category IS NOT NULL GROUP BY category ORDER BY count DESC")
+    stats = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jsonify({"categories": stats})
+
 @app.route('/api/analyze', methods=['POST'])
+
 def analyze_news_route():
     """Belirli bir haberi manuel olarak analiz eder (Doğrulamalı)."""
     try:
@@ -160,11 +195,21 @@ def analyze_news_route():
             conn.close()
             return jsonify({"analysis": existing[0]})
 
-        prompt = f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ile başla.\nHaber: {req_data.title}\nLink: {req_data.link}"
+        prompt = (
+            f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ve 'KATEGORI: [Malware/Phishing/Ransomware/Vulnerability/Breach/General]' ile başla.\n"
+            f"Haber: {req_data.title}\nLink: {req_data.link}"
+        )
         analysis_result = ai_manager.analyze(prompt)
 
         if analysis_result and not analysis_result.startswith("HATA:"):
-            cursor.execute("UPDATE news SET ai_analysis = ? WHERE link = ?", (analysis_result, req_data.link))
+            # Kategoriyi ayıkla
+            category = "General"
+            if "KATEGORI:" in analysis_result:
+                try: category = analysis_result.split("KATEGORI:")[1].split("]")[0].replace("[", "").strip()
+                except: pass
+            
+            cursor.execute("UPDATE news SET ai_analysis = ?, category = ? WHERE link = ?", 
+                           (analysis_result, category, req_data.link))
             conn.commit()
         
         conn.close()
@@ -176,12 +221,16 @@ def analyze_news_route():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/cve', methods=['GET'])
+@limiter.limit("10 per minute")
 def analyze_cve_route():
-    """CVE ID üzerinden istihbarat toplar ve AI ile teknik yorum ekler (Doğrulamalı)."""
+    """CVE ID üzerinden istihbarat toplar ve AI ile teknik yorum ekler (Önbellekli)."""
     try:
         cve_id = request.args.get('id', '').strip().upper()
-        # Doğrulama
         CveRequest(id=cve_id)
+
+        # Önbellek Kontrolü
+        cached_data = get_cache(f"cve_{cve_id}")
+        if cached_data: return jsonify(cached_data)
 
         res = requests.get(f"https://cve.circl.lu/api/cve/{cve_id}", timeout=15)
         if res.status_code == 200:
@@ -195,13 +244,15 @@ def analyze_cve_route():
             prompt = f"Siber güvenlik uzmanı olarak analiz et:\nCVE: {cve_id}\nCVSS: {cvss}\n{context}"
             ai_comment = ai_manager.analyze(prompt)
             
-            return jsonify({
+            result = {
                 "id": cve_id,
                 "summary": summary,
                 "cvss": cvss,
                 "ai_comment": ai_comment,
                 "references": data.get('references', [])[:5]
-            })
+            }
+            set_cache(f"cve_{cve_id}", result)
+            return jsonify(result)
         return jsonify({"error": "Dış servis hatası"}), 502
     except ValidationError:
         return jsonify({"error": "Geçersiz CVE formatı (Örn: CVE-2024-1234)"}), 400
@@ -210,23 +261,32 @@ def analyze_cve_route():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/ip', methods=['GET'])
+@limiter.limit("20 per minute")
 def analyze_ip_route():
-    """IP adresi üzerinden konum ve ISP istihbaratı toplar."""
+    """IP adresi üzerinden konum ve ISP istihbaratı toplar (Önbellekli)."""
     try:
         ip_addr = request.args.get('ip', '').strip()
         IpRequest(ip=ip_addr)
+
+        # Önbellek Kontrolü
+        cached_data = get_cache(f"ip_{ip_addr}")
+        if cached_data: return jsonify(cached_data)
 
         res = requests.get(f"http://ip-api.com/json/{ip_addr}?fields=status,message,country,city,isp,org,as,query", timeout=10)
         if res.status_code == 200:
             data = res.json()
             if data['status'] == 'fail': return jsonify({"error": "IP bulunamadı"}), 404
-            return jsonify({
+            
+            result = {
                 "ip": data['query'],
                 "location": f"{data.get('city')}, {data.get('country')}",
                 "isp": data.get('isp'),
                 "org": data.get('org'),
                 "as": data.get('as')
-            })
+            }
+            set_cache(f"ip_{ip_addr}", result)
+            return jsonify(result)
+
         return jsonify({"error": "Servis ulaşılamadı"}), 502
     except ValidationError:
         return jsonify({"error": "Geçersiz IP adresi"}), 400
@@ -262,6 +322,36 @@ def analyze_dns_route():
         logger.error(f"DNS sorgu hatası: {e}")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/whois', methods=['GET'])
+@limiter.limit("5 per minute")
+def get_whois():
+    """Domain için WHOIS bilgilerini çeker (Önbellekli)."""
+    domain = request.args.get('domain', '').strip()
+    if not domain: return jsonify({"error": "Domain gerekli"}), 400
+    
+    # Önbellek Kontrolü
+    cached_data = get_cache(f"whois_{domain}")
+    if cached_data: return jsonify(cached_data)
+
+    import whois
+    try:
+        w = whois.whois(domain)
+        # Dönüş verisini serialize edilebilir hale getir (datetime nesneleri olabilir)
+        result = {
+            "domain": domain,
+            "registrar": w.registrar,
+            "creation_date": str(w.creation_date[0] if isinstance(w.creation_date, list) else w.creation_date),
+            "expiration_date": str(w.expiration_date[0] if isinstance(w.expiration_date, list) else w.expiration_date),
+            "name_servers": w.name_servers if isinstance(w.name_servers, list) else [w.name_servers],
+            "status": w.status[0] if isinstance(w.status, list) else w.status
+        }
+        set_cache(f"whois_{domain}", result)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Whois Hatası: {e}")
+        return jsonify({"error": "Whois bilgisi alınamadı"}), 500
+
 if __name__ == '__main__':
+
     logger.info("🚀 SentinelAi Sunucusu Başlatılıyor...")
     app.run(host='0.0.0.0', port=5000, debug=True)
