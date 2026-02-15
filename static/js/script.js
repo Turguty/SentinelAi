@@ -363,3 +363,77 @@ function searchNews(e, page = 1) {
     if (e && e.type === 'keyup' && e.key !== 'Enter') return;
     fetchNews(page);
 }
+
+async function analyzeAll() {
+    if (!confirm('Bekleyen tüm haberlerin toplu analizi başlatılsın mı? (Bu işlem arka planda yapılır)')) return;
+    try {
+        const res = await fetch('/api/analyze_all', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || data.error);
+    } catch (e) { alert('İşlem başlatılamadı.'); }
+}
+
+async function querySubdomains() {
+    const domain = document.getElementById('subs-input').value.trim();
+    if (!domain) return alert("Lütfen bir domain girin");
+
+    document.getElementById('analysis-panel').classList.remove('hidden');
+    const display = document.getElementById('analysis-text');
+    display.innerHTML = `<div class="loading">📡 <b>${domain}</b> için pasif keşif yapılıyor (crt.sh)...</div>`;
+
+    try {
+        const res = await fetch(`/api/subdomains?domain=${domain}`);
+        const data = await res.json();
+        if (data.error) {
+            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+        } else {
+            display.innerHTML = `
+                <div class="subs-result">
+                    <h4>Keşfedilen Subdomainler: ${data.domain}</h4>
+                    <p><small>Sadece benzersiz ve ilk 50 kayıt listelenmiştir.</small></p>
+                    <hr>
+                    <div style="max-height: 400px; overflow-y: auto; text-align: left;">
+                        <ul style="list-style: none; padding: 0;">
+                            ${data.subdomains.map(s => `<li style="padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #3b82f6;">🔗 ${s}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>`;
+        }
+    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+}
+
+async function updateSystemHealth() {
+    try {
+        const res = await fetch('/api/system/health');
+        const data = await res.json();
+        document.getElementById('cpu-val').innerText = `${data.cpu}%`;
+        document.getElementById('ram-val').innerText = `${data.ram}%`;
+        document.getElementById('cpu-val').style.color = data.cpu > 80 ? '#ef4444' : '#3b82f6';
+        document.getElementById('ram-val').style.color = data.ram > 80 ? '#ef4444' : '#3b82f6';
+    } catch (e) { }
+}
+
+async function downloadWeeklyReport() {
+    try {
+        const res = await fetch('/api/news?page=1');
+        const data = await res.json();
+        let report = '# SentinelAi Haftalık Güvenlik Raporu\nOluşturulma: ' + new Date().toLocaleString() + '\n\n';
+
+        data.news.forEach(item => {
+            report += '### ' + item.title + '\n';
+            report += '* **Kaynak:** ' + item.source + '\n';
+            report += '* **Tarih:** ' + item.published + '\n';
+            report += '* **Analiz:** ' + (item.ai_analysis || 'Henüz analiz edilmedi.') + '\n\n';
+            report += '---\n\n';
+        });
+
+
+        const blob = new Blob([report], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'sentinel-haftalik-rapor-' + new Date().toISOString().split('T')[0] + '.md';
+        a.click();
+    } catch (e) { alert('Rapor oluşturulamadı.'); }
+}
+

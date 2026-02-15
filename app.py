@@ -351,7 +351,44 @@ def get_whois():
         logger.error(f"Whois Hatası: {e}")
         return jsonify({"error": "Whois bilgisi alınamadı"}), 500
 
-if __name__ == '__main__':
+@app.route('/api/analyze_all', methods=['POST'])
+@limiter.limit("2 per hour")
+def trigger_bulk_analysis():
+    """Arka planda bekleyen tüm haberleri analiz eder."""
+    scheduler.add_job(func=process_missing_analysis, trigger="date")
+    return jsonify({"message": "Toplu analiz süreci başlatıldı."})
 
+@app.route('/api/subdomains', methods=['GET'])
+@limiter.limit("5 per minute")
+def get_subdomains():
+    """crt.sh üzerinden pasif subdomain keşfi."""
+    domain = request.args.get('domain', '').strip()
+    if not domain: return jsonify({"error": "Domain gerekli"}), 400
+    
+    cached = get_cache(f"subs_{domain}")
+    if cached: return jsonify(cached)
+
+    try:
+        res = requests.get(f"https://crt.sh/?q=%25.{domain}&output=json", timeout=25)
+        if res.status_code == 200:
+            subs = sorted(list(set([e['name_value'] for e in res.json()])))[:60]
+            result = {"domain": domain, "subdomains": subs}
+            set_cache(f"subs_{domain}", result)
+            return jsonify(result)
+        return jsonify({"error": "crt.sh servisine ulaşılamadı"}), 502
+    except:
+        return jsonify({"error": "Bağlantı hatası"}), 500
+
+@app.route('/api/system/health', methods=['GET'])
+def get_system_health():
+    """Sunucu kaynak kullanımını döner."""
+    return jsonify({
+        "cpu": psutil.cpu_percent(),
+        "ram": psutil.virtual_memory().percent,
+        "uptime": int(time.time() - start_time)
+    })
+
+if __name__ == '__main__':
     logger.info("🚀 SentinelAi Sunucusu Başlatılıyor...")
     app.run(host='0.0.0.0', port=5000, debug=True)
+

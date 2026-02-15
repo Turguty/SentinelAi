@@ -67,6 +67,22 @@ body {
 }
 
 
+.system-health {
+    display: flex;
+    gap: 15px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.03);
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+}
+
+.system-health b {
+    color: var(--accent);
+}
+
+
 .logo {
     font-weight: 600;
     letter-spacing: 2px;
@@ -391,18 +407,27 @@ body {
 /* Tehdit Seviyesi İndikatörleri */
 .news-card.critical {
     border-left: 5px solid var(--danger) !important;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
 }
 
 .news-card.medium {
     border-left: 5px solid #f59e0b !important;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.1);
 }
 
-/* Turuncu */
 .news-card.low {
     border-left: 5px solid var(--success) !important;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.1);
+}
+
+.news-card.viewed {
+    opacity: 0.6;
+    filter: grayscale(0.4);
+    border-left-color: #333 !important;
 }
 
 /* Kart içindeki seviye etiketi (Badge) */
+
 .threat-badge {
     display: inline-block;
     padding: 2px 8px;
@@ -503,4 +528,24 @@ body {
     .btn-pdf-modern {
         font-size: 0.8rem;
     }
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.loading {
+    animation: pulse 1.5s infinite;
+    color: var(--accent);
+    font-weight: 600;
 }

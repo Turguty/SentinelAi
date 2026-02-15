@@ -80,14 +80,28 @@
                     <button onclick="queryWhois()">Sorgula</button>
                 </div>
             </div>
+            <div class="tool-card">
+                <h4>Subdomain Keşfi (Pasif)</h4>
+                <div class="tool-input-group">
+                    <input type="text" id="subs-input" placeholder="google.com">
+                    <button onclick="querySubdomains()">Keşfet</button>
+                </div>
+            </div>
         </section>
+
 
 
 
         <section class="feed-section">
             <div class="section-header">
                 <h2>Güncel Tehdit Akışı</h2>
+                <div class="header-actions">
+                    <button class="btn-analyze" onclick="analyzeAll()" style="font-size: 0.8rem;">🧠 Hepsini Analiz
+                        Et</button>
+                    <button class="btn-refresh" onclick="fetchNews(1)">🔄 Yenile</button>
+                </div>
             </div>
+
             <div id="news-feed" class="news-grid"></div>
             <div id="pagination-container" class="pagination-wrapper"></div>
         </section>
