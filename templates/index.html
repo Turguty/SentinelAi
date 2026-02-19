@@ -12,27 +12,39 @@
 
 <body class="dark-theme">
     <nav class="navbar">
-        <div class="nav-left">
-            <div class="logo">SENTINEL<span>AI</span></div>
-            <div class="search-container">
-                <input type="text" id="search-input" placeholder="Tehditlerde ara..." onkeyup="searchNews(event, 1)">
+        <div class="nav-container">
+            <div class="nav-left">
+                <div class="logo">SENTINEL<span>AI</span></div>
+                <div class="nav-links">
+                    <a href="#" class="active">🏠 Panel</a>
+                    <a href="#tools">🛠️ Araçlar</a>
+                    <a href="#feed">📡 Akış</a>
+                </div>
             </div>
 
+            <div class="nav-center">
+                <div class="search-container">
+                    <input type="text" id="search-input" placeholder="Tehditlerde ara..."
+                        onkeyup="searchNews(event, 1)">
+                </div>
+            </div>
+
+            <div class="nav-right">
+                <button class="btn-refresh-nav" onclick="fetchNews(1)" title="Akışı Yenile">🔄 Akışı Yenile</button>
+                <button onclick="downloadWeeklyReport()" class="btn-report">📅 Rapor</button>
+                <div class="status-indicator" title="Sistem Aktif"><span class="dot"></span></div>
+            </div>
         </div>
-        <div class="nav-right">
+    </nav>
+
+    <div class="sub-navbar">
+        <div class="sub-container">
             <div id="ai-status-bar" class="ai-status-bar">
                 <!-- AI durumları buraya gelecek -->
             </div>
-            <div id="system-health" class="system-health">
-                <span>CPU: <b id="cpu-val">0%</b></span>
-                <span>RAM: <b id="ram-val">0%</b></span>
-            </div>
-            <button onclick="downloadWeeklyReport()" class="btn-report">📅 Haftalık Rapor İndir</button>
-            <div class="status-indicator"><span class="dot"></span> Sistem Aktif</div>
-
         </div>
+    </div>
 
-    </nav>
 
     <main class="container">
         <section class="charts-container">
@@ -51,7 +63,7 @@
         </section>
 
 
-        <section class="tools-container">
+        <section id="tools" class="tools-container">
             <div class="tool-card">
                 <h4>CVE Analizi</h4>
                 <div class="tool-input-group">
@@ -92,14 +104,9 @@
 
 
 
-        <section class="feed-section">
+        <section id="feed" class="feed-section">
             <div class="section-header">
                 <h2>Güncel Tehdit Akışı</h2>
-                <div class="header-actions">
-                    <button class="btn-analyze" onclick="analyzeAll()" style="font-size: 0.8rem;">🧠 Hepsini Analiz
-                        Et</button>
-                    <button class="btn-refresh" onclick="fetchNews(1)">🔄 Yenile</button>
-                </div>
             </div>
 
             <div id="news-feed" class="news-grid"></div>

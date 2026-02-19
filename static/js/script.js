@@ -1,15 +1,23 @@
+let currentPage = 1;
 let sourceChart = null;
-let categoryChart = null;
 let barChart = null;
+let categoryChart = null;
+let lastPendingCount = -1; // İlk yüklemede tetiklenmemesi için -1
 
 document.addEventListener('DOMContentLoaded', () => {
     fetchNews(1);
     updateStats();
     updateAIStatus();
-    // Her 30 saniyede bir AI durumunu güncelle
-    setInterval(updateAIStatus, 30000);
-    updateSystemHealth();
-    setInterval(updateSystemHealth, 10000);
+
+    // Polling düzenekleri
+    setInterval(updateAIStatus, 15000);   // AI durumunu ve kuyruğu 15sn'de bir çek
+    setInterval(() => {
+        // Eğer ilk sayfadaysak yeni haberleri kontrol et
+        if (typeof currentPage !== 'undefined' && currentPage === 1) {
+            fetchNews(1);
+        }
+        updateStats(); // Grafikleri güncelle
+    }, 60000); // 1 dakikada bir veri yenile
 });
 
 async function updateSystemHealth() {
@@ -31,21 +39,46 @@ async function updateAIStatus() {
     try {
         const res = await fetch('/api/ai_status');
         const data = await res.json();
-        const statusBar = document.getElementById('ai-status-bar');
-        statusBar.innerHTML = '';
+        const bar = document.getElementById('ai-status-bar');
+        if (!bar) return;
 
-        for (const [service, status] of Object.entries(data)) {
-            const item = document.createElement('div');
-            item.className = 'ai-status-item';
-            item.title = status === 'active' ? 'Aktif' : (status === 'cooldown' ? 'Soğuma Modunda' : 'Anahtar Yok');
-            item.innerHTML = `
-                <span class="ai-status-dot ${status}"></span>
-                ${service.charAt(0).toUpperCase() + service.slice(1, 3)}
-            `;
-            statusBar.appendChild(item);
+        let html = '<div style="display:flex; align-items:center; gap:12px; font-size:0.85rem; color:#90949a;"><b>AI ENGINE STATUS:</b>';
+        for (const [provider, status] of Object.entries(data)) {
+            if (provider === 'pending_analysis') continue;
+            const isOnline = status === 'aktif' || status === 'active';
+            const color = isOnline ? '#10b981' : '#f59e0b';
+            html += `<span style="display:flex; align-items:center; gap:6px;">
+                        <span style="width:8px; height:8px; border-radius:50%; background:${color}; box-shadow:0 0 8px ${color}"></span>
+                        ${provider.toUpperCase()}
+                     </span>`;
         }
-    } catch (e) { console.error("AI durum güncelleme hatası:", e); }
+        html += '</div>';
+
+        // Kuyruk Durumu
+        if (data.pending_analysis > 0) {
+            html += `<div class="ai-badge pending" style="margin-left:auto; border: 1px solid #ef4444; background: rgba(239,68,68,0.1); padding: 2px 12px; border-radius: 20px; font-size: 0.8rem; color:#ef4444; font-weight:bold;">
+                        ⏳ ${data.pending_analysis} News in Queue
+                     </div>`;
+        } else {
+            html += `<div style="margin-left:auto; color: #3b82f6; font-size: 0.8rem; font-weight:500;">✨ All feeds analyzed</div>`;
+        }
+
+        // OTOMATİK GÜNCELLEME TETİKLEYİCİ: 
+        // Eğer bekleyen sayısı azaldıysa (bir haber analiz edildiyse) sayfayı yenile
+        if (lastPendingCount !== -1 && data.pending_analysis < lastPendingCount) {
+            console.log("⚡ AI analizi tamamlandı, sayfa güncelleniyor...");
+            if (currentPage === 1) fetchNews(1); // İlk sayfadaysak haberleri çek
+            updateStats(); // Grafikleri güncelle
+        }
+        lastPendingCount = data.pending_analysis;
+
+        bar.innerHTML = html;
+        bar.style.display = 'flex';
+        bar.style.alignItems = 'center';
+        bar.style.width = '100%';
+    } catch (e) { }
 }
+
 
 
 async function fetchNews(page = 1) {
@@ -61,24 +94,67 @@ async function fetchNews(page = 1) {
 
 function renderNews(newsItems) {
     const feed = document.getElementById('news-feed');
+    if (!feed) return;
     feed.innerHTML = '';
+
+    if (!newsItems || newsItems.length === 0) {
+        feed.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #90949a;">📭 Henüz haber bulunamadı veya kriterlere uygun sonuç yok.</div>';
+        return;
+    }
+
     newsItems.forEach(item => {
         let level = (item.ai_analysis || "").includes('KRITIK') ? 'critical' :
             (item.ai_analysis || "").includes('ORTA') ? 'medium' : 'low';
 
+        // Güvenli tırnak kaçırma
+        const safeTitle = (item.title || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
+        // Kategori renkleri (grafikteki ile aynı)
+        const categoryColors = {
+            'Malware': '#ef4444',
+            'Ransomware': '#dc2626',
+            'Phishing': '#f59e0b',
+            'Vulnerability': '#8b5cf6',
+            'Breach': '#ec4899',
+            'APT': '#6366f1',
+            'DDoS': '#14b8a6',
+            'Data Leak': '#f97316',
+            'General': '#6b7280'
+        };
+
+        const category = item.category || 'General';
+        const categoryColor = categoryColors[category] || '#6b7280';
+
         const card = document.createElement('div');
         card.className = `news-card ${level}`;
         card.innerHTML = `
-            <div class="card-meta"><span class="threat-badge badge-${level}">${level.toUpperCase()}</span><small>${item.source}</small></div>
+            <div class="card-meta">
+                <span class="threat-badge badge-${level}">${level.toUpperCase()}</span>
+                <span class="category-badge" style="background: ${categoryColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-left: 6px;">
+                    ${category}
+                </span>
+                <small>${item.source}</small>
+            </div>
             <h3>${item.title}</h3>
             <div class="card-actions">
                 <a href="${item.link}" target="_blank" class="btn-link">🌐 Git</a>
-                <button class="btn-analyze" onclick="analyzeNews('${item.title.replace(/'/g, "\\'")}', '${item.link}')">
-                    ${item.ai_analysis ? '📂 Arşiv' : '🧠 Analiz'}
+                <button class="btn-analyze" onclick="analyzeNews('${safeTitle}', '${item.link}')">
+                    ${item.ai_analysis ? '🧠 Ai Analizi' : '🧠 Analiz'}
                 </button>
             </div>`;
         feed.appendChild(card);
     });
+}
+
+function searchNews(event) {
+    // Esc tuşuna basılırsa aramayı temizle
+    if (event.key === "Escape") {
+        document.getElementById('search-input').value = "";
+        fetchNews(1);
+        return;
+    }
+    // Her tuş basımında değil, debounce yapılabilir ama şimdilik doğrudan çağırıyoruz
+    fetchNews(1);
 }
 
 function renderPagination(total, perPage, current) {
@@ -136,7 +212,8 @@ async function updateStats() {
         const intCounts = intData.intensity.map(i => i.count);
 
         const ctxBar = document.getElementById('barChart').getContext('2d');
-        new Chart(ctxBar, {
+        if (barChart) barChart.destroy();
+        barChart = new Chart(ctxBar, {
             type: 'bar',
             data: {
                 labels: intLabels,
@@ -168,31 +245,124 @@ async function updateStats() {
 
         const ctxCat = document.getElementById('categoryChart').getContext('2d');
         if (categoryChart) categoryChart.destroy();
+
+        // Her kategori için özel renk paleti
+        const categoryColors = {
+            'Malware': '#ef4444',        // Kırmızı
+            'Ransomware': '#dc2626',     // Koyu kırmızı
+            'Phishing': '#f59e0b',       // Turuncu
+            'Vulnerability': '#8b5cf6',  // Mor
+            'Breach': '#ec4899',         // Pembe
+            'APT': '#6366f1',            // İndigo
+            'DDoS': '#14b8a6',           // Teal
+            'Data Leak': '#f97316',      // Koyu turuncu
+            'General': '#6b7280'         // Gri
+        };
+
+        // Her çubuk için renk ata
+        const barColors = catLabels.map(label => categoryColors[label] || '#8b5cf6');
+
         categoryChart = new Chart(ctxCat, {
             type: 'bar',
             data: {
-                labels: catLabels,
+                labels: catLabels.map(l => l.length > 30 ? l.substring(0, 27) + "..." : l),
                 datasets: [{
                     label: 'Olay Sayısı',
                     data: catCounts,
-                    backgroundColor: '#8b5cf6',
-                    borderRadius: 4
+                    backgroundColor: barColors,
+                    borderRadius: 6,
+                    barThickness: 'flex',  // Otomatik genişlik
+                    maxBarThickness: 40    // Maksimum genişlik sınırı
                 }]
             },
             options: {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
+                onClick: (event, elements) => {
+                    // Çubuğa tıklandığında kategori filtreleme
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const category = catLabels[index];
+                        filterNewsByCategory(category);
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: 'rgba(21, 25, 30, 0.9)',
+                        titleColor: '#3b82f6',
+                        bodyColor: '#e1e1e1',
+                        padding: 12,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function (context) {
+                                return `${context.parsed.x} haber (Tıkla: Filtrele)`;
+                            }
+                        }
+                    }
+                },
                 scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#90949a' } },
-                    y: { grid: { display: false }, ticks: { color: '#e1e1e1', font: { weight: 'bold' } } }
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.03)' },
+                        ticks: { color: '#90949a', stepSize: 5 }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#e1e1e1',
+                            font: { weight: '600', size: 11 },
+                            padding: 8
+                        }
+                    }
+                },
+                layout: {
+                    padding: {
+                        left: 10,
+                        right: 10,
+                        top: 10,
+                        bottom: 10
+                    }
                 }
             }
         });
 
     } catch (e) { console.error("Grafik hatası:", e); }
 
+}
+
+// Kategoriye göre haberleri filtrele
+async function filterNewsByCategory(category) {
+    try {
+        // Arama inputunu temizle
+        document.getElementById('search-input').value = '';
+
+        // Kategori bilgisini göster
+        const feed = document.getElementById('news-feed');
+        feed.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #3b82f6;">
+            🔍 <b>${category}</b> kategorisi yükleniyor...
+        </div>`;
+
+        // API'den kategori bazlı haberleri çek
+        const res = await fetch(`/api/news?category=${encodeURIComponent(category)}&page=1`);
+        const data = await res.json();
+
+        if (data.news && data.news.length > 0) {
+            renderNews(data.news);
+            renderPagination(data.total, 10, 1);
+
+            // Sayfayı haber akışına kaydır
+            document.getElementById('feed').scrollIntoView({ behavior: 'smooth' });
+        } else {
+            feed.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #90949a;">
+                📭 <b>${category}</b> kategorisinde haber bulunamadı.
+            </div>`;
+        }
+    } catch (e) {
+        console.error("Kategori filtreleme hatası:", e);
+    }
 }
 
 async function queryDNS() {

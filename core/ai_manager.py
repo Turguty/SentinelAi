@@ -18,9 +18,12 @@ class AIManager:
     SentinelAi'nın beyin motoru: Birden fazla AI servisini (Gemini, Groq, Mistral vb.) 
     yedekli (fallback) ve hata toleranslı şekilde yönetir.
     """
+    # Sınıf seviyesinde paylaşımlı durum takibi (Background task ve App arası senkronizasyon için)
+    _shared_cooldowns = {}
+
     def __init__(self):
         """
-        AI servisleri için anahtarları hazırlar ve başlangıç durumlarını (cooldown vb.) ayarlar.
+        AI servisleri için anahtarları hazırlar ve başlangıç durumlarını ayarlar.
         """
         self.keys = {
             "gemini": os.getenv('GEMINI_API_KEY'),
@@ -31,8 +34,11 @@ class AIManager:
         }
         # Deneme önceliği sırası
         self.order = ["gemini", "groq", "mistral", "openrouter", "huggingface"]
-        # Hatalı servislerin bekleme süresi takibi
-        self.cooldowns = {service: 0 for service in self.order}
+        
+        # Paylaşımlı cooldown sözlüğünü ilk kez oluştur
+        if not AIManager._shared_cooldowns:
+            AIManager._shared_cooldowns = {service: 0 for service in self.order}
+        
         self.cooldown_duration = 300  # 5 dakika soğuma süresi
 
     def get_status(self):
@@ -44,24 +50,34 @@ class AIManager:
         for service in self.order:
             if not self.keys.get(service) and service != "huggingface":
                 status[service] = "no_key"
-            elif current_time < self.cooldowns[service]:
+            elif current_time < AIManager._shared_cooldowns.get(service, 0):
                 status[service] = "cooldown"
             else:
                 status[service] = "active"
         return status
 
-    def analyze(self, prompt):
+    def analyze(self, prompt, use_load_balance=False):
         """
-        Verilen metni (haber, CVE vb.) mevcut AI servislerini sırayla deneyerek analiz eder.
+        Verilen metni mevcut AI servislerini deneyerek analiz eder.
+        use_load_balance=True ise servisleri sırayla değil, farklı servisleri deneyecek şekilde dağıtır.
         """
         current_time = time.time()
-        for service in self.order:
+        
+        # Deneme listesini oluştur
+        test_order = self.order.copy()
+        if use_load_balance:
+            # Load balance durumunda önceliği kaydır (basit Round-Robin benzeri)
+            # time.time() kullanarak her saniye/dakika farklı bir başlangıç servisi seçilebilir
+            shift = int(time.time() % len(self.order))
+            test_order = self.order[shift:] + self.order[:shift]
+
+        for service in test_order:
             if not self.keys.get(service) and service != "huggingface": continue
-            if current_time < self.cooldowns[service]: continue
+            if current_time < AIManager._shared_cooldowns.get(service, 0): continue
             
             try:
                 # Servisler arası çok hızlı geçişi önlemek için kısa mola
-                time.sleep(1.5) 
+                time.sleep(1.0) 
                 
                 logger.info(f"🤖 AI Deneniyor: {service.upper()}")
                 if service == "gemini": result = self._call_gemini(prompt)
@@ -72,14 +88,19 @@ class AIManager:
                 
                 if result and "HATA:" not in result:
                     logger.info(f"✅ {service.upper()} başarılı.")
+                    # Hangi AI'nın analiz ettiği bilgisini en tepeye ekle
+                    header = f"🤖 **Analiz Sağlayıcı:** {service.upper()}\n"
+                    # Eğer zaten bir AI tarafından imzalanmışsa mükerrer ekleme
+                    if not result.startswith("🤖 **Analiz Sağlayıcı:**"):
+                        result = header + "--- \n" + result
                     return result
                 else:
                     raise Exception(result)
 
             except Exception as e:
                 logger.warning(f"⚠️ {service.upper()} Hatası: {str(e)}")
-                # Hata alan servisi geçici olarak engelle (5 dk)
-                self.cooldowns[service] = current_time + self.cooldown_duration
+                # Hata alan servisi paylaşımlı durumda engelle
+                AIManager._shared_cooldowns[service] = current_time + self.cooldown_duration
                 continue
 
         logger.error("❌ Tüm AI servisleri şu an ulaşılamaz durumda.")
