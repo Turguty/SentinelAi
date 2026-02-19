@@ -6,6 +6,7 @@ import time
 import requests
 from core.ai_manager import AIManager
 from core.logger import setup_logger
+from core.prompts import ANALYSIS_SYSTEM_PROMPT, generate_news_prompt
 
 # Loglama kurulumu
 logger = setup_logger("Fetcher")
@@ -61,10 +62,27 @@ def init_db():
     if 'category' not in columns:
         logger.info("🛠️ Veritabanı şeması güncelleniyor: 'category' sütunu ekleniyor...")
         cursor.execute("ALTER TABLE news ADD COLUMN category TEXT")
+        
+    # İndeksler (Performans için)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_published ON news(published)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_category ON news(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_source ON news(source)")
 
     conn.commit()
     conn.close()
 
+def parse_ai_json_to_text(json_data):
+    """JSON analiz sonucunu veritabanı formatına (string) çevirir."""
+    if not json_data:
+        return "Analiz yapılamadı."
+    
+    threat = json_data.get('threat_level', 'UNKNOWN')
+    cat = json_data.get('category', 'General')
+    summary = json_data.get('summary', '')
+    details = json_data.get('technical_details', '')
+    
+    # Frontend formatına uygun string oluştur
+    return f"❌ TEHDIT SEVIYESI: [{threat}]\n📂 KATEGORI: [{cat}]\n\n📝 Özet: {summary}\n\n⚙️ Teknik Detay: {details}"
 
 def process_missing_analysis():
     """Analizi henüz yapılmamış haberleri tespit eder ve tamamlar."""
@@ -78,6 +96,7 @@ def process_missing_analysis():
     missing_news = cursor.fetchall()
     
     if not missing_news:
+        conn.close()
         return
 
     logger.info(f"🧠 {len(missing_news)} eksik haber analiz ediliyor...")
@@ -89,35 +108,23 @@ def process_missing_analysis():
 
     for row in missing_news:
         news_id, title, link = row
-        prompt = (
-            f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ve 'KATEGORI: [Malware/Phishing/Ransomware/Vulnerability/Breach/General]' ile başla.\n"
-            f"Haber: {title}\nLink: {link}"
-        )
-        analysis = ai_manager.analyze(prompt, use_load_balance=use_lb)
+        prompt = generate_news_prompt(title, link)
         
-        if analysis and not analysis.startswith("HATA:"):
-            # Kategoriyi ayıkla ve doğrula
-            category = "General"
-            valid_categories = ["Malware", "Phishing", "Ransomware", "Vulnerability", "Breach", "General"]
+        # JSON Analizi
+        json_result = ai_manager.analyze_json(prompt, system_prompt=ANALYSIS_SYSTEM_PROMPT)
+        
+        if json_result:
+            analysis_text = parse_ai_json_to_text(json_result)
+            category = json_result.get('category', 'General')
             
-            if "KATEGORI:" in analysis:
-                try: 
-                    raw_cat = analysis.split("KATEGORI:")[1].split("]")[0].replace("[", "").strip()
-                    found = False
-                    for valid in valid_categories:
-                        if valid.lower() in raw_cat.lower():
-                            category = valid
-                            found = True
-                            break
-                    if not found and len(raw_cat) > 20: 
-                        category = "General"
-                    elif not found:
-                        category = raw_cat[:20]
-                except: pass
-
-            cursor.execute("UPDATE news SET ai_analysis = ?, category = ? WHERE id = ?", (analysis, category, news_id))
+            cursor.execute("UPDATE news SET ai_analysis = ?, category = ? WHERE id = ?", (analysis_text, category, news_id))
             conn.commit()
-            time.sleep(3) 
+            logger.info(f"✅ Haber güncellendi: {title[:30]}...")
+            time.sleep(2) 
+        else:
+            # Hata durumunda
+            logger.warning(f"⚠️ Analiz başarısız (ID: {news_id})")
+            time.sleep(1)
             
     conn.close()
 
@@ -137,84 +144,67 @@ def fetch_rss():
         for source in sources['sources']:
             if not source.get('active', True): continue
             logger.info(f"📡 Tarama başlatıldı: {source['name']}")
-            feed = feedparser.parse(source['url'])
-            
-            for entry in feed.entries:
-                title = entry.title
-                link = entry.link
+            try:
+                feed = feedparser.parse(source['url'])
                 
-                cursor.execute("SELECT id FROM news WHERE link = ?", (link,))
-                if cursor.fetchone(): continue
-
-                # Güvenlik odaklı filtreleme: Başlıkta anahtar kelime yoksa veya açıkça alakasızsa atla
-                security_keywords = ["cyber", "security", "exploit", "cve", "vulnerability", "malware", "hack", "breach", "ransomware", "zero-day", "leak", "threat", "attack"]
-                content_text = (title + " " + entry.get('summary', '')).lower()
-                is_security_related = any(kw in content_text for kw in security_keywords)
-                
-                if not is_security_related:
-                    # AI analizi yerine varsayılan olarak düşük seviyeli ve genel kategorili kaydet (isteğe bağlı)
-                    # Veya tamamen atla:
-                    continue
-
-                logger.info(f"💡 Yeni güvenlik haberi bulundu: {title[:70]}...")
-                
-                # Anlık analiz
-                prompt = (
-                    f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ve 'KATEGORI: [Malware/Phishing/Ransomware/Vulnerability/Breach/General]' ile başla.\n"
-                    f"Haberi: {title}"
-                )
-                analysis = ai_manager.analyze(prompt)
-                
-                # Kategoriyi akıllı şekilde çıkar (anahtar kelime bazlı)
-                def extract_category_from_analysis(text):
-                    if not text:
-                        return "General"
+                for entry in feed.entries:
+                    title = entry.title
+                    link = entry.link
                     
-                    text_lower = text.lower()
-                    
-                    # Öncelik sırasına göre kategorileri kontrol et
-                    category_keywords = {
-                        "Ransomware": ["ransomware", "fidye", "ransom"],
-                        "Malware": ["malware", "trojan", "virus", "worm", "rat", "stealer", "backdoor", "spyware", "stalkerware"],
-                        "Phishing": ["phishing", "phish", "sosyal mühendislik", "social engineering"],
-                        "DDoS": ["ddos", "denial of service", "botnet"],
-                        "APT": ["apt", "advanced persistent"],
-                        "Vulnerability": ["vulnerability", "zafiyet", "cve-", "zero-day", "zero day", "exploit"],
-                        "Breach": ["breach", "data leak", "veri sızıntısı", "ihlal", "leak"],
-                        "Data Leak": ["data leak", "veri sızıntısı"]
-                    }
-                    
-                    for category, keywords in category_keywords.items():
-                        for keyword in keywords:
-                            if keyword in text_lower:
-                                return category
-                    
-                    return "General"
-                
-                category = extract_category_from_analysis(analysis)
+                    cursor.execute("SELECT id FROM news WHERE link = ?", (link,))
+                    if cursor.fetchone(): continue
 
-                try:
-                    cursor.execute(
-                        "INSERT INTO news (title, link, published, source, ai_analysis, category) VALUES (?, ?, ?, ?, ?, ?)",
-                        (title, link, entry.get('published', 'Bilinmiyor'), source['name'], analysis, category)
-                    )
-                    conn.commit()
+                    # Güvenlik odaklı filtreleme
+                    security_keywords = ["cyber", "security", "exploit", "cve", "vulnerability", "malware", "hack", "breach", "ransomware", "zero-day", "leak", "threat", "attack"]
+                    content_text = (title + " " + entry.get('summary', '')).lower()
+                    is_security_related = any(kw in content_text for kw in security_keywords)
                     
-                    # Telegram Bildirimi
-                    is_urgent = any(kw.lower() in title.lower() for kw in KEYWORDS)
-                    header = "🚨 *KRİTİK HABER*" if is_urgent else "📰 *YENİ HABER*"
-                    telegram_msg = f"{header}\n\n*Başlık:* {title}\n*Kaynak:* {source['name']}\n\n*AI:* {analysis[:300]}...\n\n[Habere Git]({link})"
-                    send_telegram_message(telegram_msg)
+                    if not is_security_related:
+                        continue
 
-                    time.sleep(3) 
+                    logger.info(f"💡 Yeni güvenlik haberi bulundu: {title[:70]}...")
+                    
+                    # Anlık analiz (JSON)
+                    prompt = generate_news_prompt(title, link, content=entry.get('summary', ''))
+                    json_result = ai_manager.analyze_json(prompt, system_prompt=ANALYSIS_SYSTEM_PROMPT)
+                    
+                    analysis_text = "Analiz Bekleniyor..."
+                    category = "General"
+                    
+                    if json_result:
+                        analysis_text = parse_ai_json_to_text(json_result)
+                        category = json_result.get('category', 'General')
+                    else:
+                        # Fallback: Eğer AI anlık yanıt vermezse, sonradan process_missing_analysis tamamlar
+                        analysis_text = None 
 
-                except Exception as e:
-                    logger.error(f"❌ Kayıt Hatası: {e}")
+                    try:
+                        cursor.execute(
+                            "INSERT INTO news (title, link, published, source, ai_analysis, category) VALUES (?, ?, ?, ?, ?, ?)",
+                            (title, link, entry.get('published', 'Bilinmiyor'), source['name'], analysis_text, category)
+                        )
+                        conn.commit()
+                        
+                        # Telegram Bildirimi
+                        is_urgent = any(kw.lower() in title.lower() for kw in KEYWORDS)
+                        header = "🚨 *KRİTİK HABER*" if is_urgent else "📰 *YENİ HABER*"
+                        telegram_analysis = json_result.get('summary', 'Detaylar için siteye göz atın.') if json_result else "Analiz ediliyor..."
+                        
+                        telegram_msg = f"{header}\n\n*Başlık:* {title}\n*Kaynak:* {source['name']}\n\n*AI:* {telegram_analysis}\n\n[Habere Git]({link})"
+                        send_telegram_message(telegram_msg)
+
+                        time.sleep(2) 
+
+                    except Exception as e:
+                        logger.error(f"❌ Kayıt Hatası: {e}")
+            except Exception as feed_err:
+                logger.error(f"⚠️ RSS Okuma Hatası ({source['name']}): {feed_err}")
+                continue
         
         conn.close()
         logger.info("✨ Tarama ve analiz süreci tamamlandı.")
     except Exception as e:
-        logger.error(f"RSS Tarama Hatası: {e}")
+        logger.error(f"Genel RSS Döngü Hatası: {e}")
 
 if __name__ == "__main__":
     init_db()

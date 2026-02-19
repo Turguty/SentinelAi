@@ -4,6 +4,20 @@ let barChart = null;
 let categoryChart = null;
 let lastPendingCount = -1; // İlk yüklemede tetiklenmemesi için -1
 
+// Merkezi Renk Paleti
+const CATEGORY_COLORS = {
+    'Malware': '#ef4444',        // Kırmızı
+    'Ransomware': '#dc2626',     // Koyu kırmızı
+    'Phishing': '#f59e0b',       // Turuncu
+    'Vulnerability': '#8b5cf6',  // Mor
+    'Breach': '#ec4899',         // Pembe
+    'APT': '#6366f1',            // İndigo
+    'DDoS': '#14b8a6',           // Teal
+    'Data Leak': '#f97316',      // Koyu turuncu
+    'General': '#6b7280'         // Gri
+    // Default fallback: #6b7280
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     fetchNews(1);
     updateStats();
@@ -24,12 +38,17 @@ async function updateSystemHealth() {
     try {
         const res = await fetch('/api/system/health');
         const data = await res.json();
-        document.getElementById('cpu-val').innerText = `${data.cpu}%`;
-        document.getElementById('ram-val').innerText = `${data.ram}%`;
+        const cpuElem = document.getElementById('cpu-val');
+        const ramElem = document.getElementById('ram-val');
 
-        // Kritik durum kontrolü (Görsel uyarı)
-        document.getElementById('cpu-val').style.color = data.cpu > 80 ? '#ef4444' : '#3b82f6';
-        document.getElementById('ram-val').style.color = data.ram > 80 ? '#ef4444' : '#3b82f6';
+        if (cpuElem) {
+            cpuElem.innerText = `${data.cpu}%`;
+            cpuElem.style.color = data.cpu > 80 ? '#ef4444' : '#3b82f6';
+        }
+        if (ramElem) {
+            ramElem.innerText = `${data.ram}%`;
+            ramElem.style.color = data.ram > 80 ? '#ef4444' : '#3b82f6';
+        }
 
     } catch (e) { console.error("Sistem sağlık hatası:", e); }
 }
@@ -83,7 +102,9 @@ async function updateAIStatus() {
 
 async function fetchNews(page = 1) {
     currentPage = page;
-    const search = document.getElementById('search-input').value;
+    const searchInput = document.getElementById('search-input');
+    const search = searchInput ? searchInput.value : '';
+
     try {
         const res = await fetch(`/api/news?page=${page}&search=${encodeURIComponent(search)}`);
         const data = await res.json();
@@ -109,21 +130,8 @@ function renderNews(newsItems) {
         // Güvenli tırnak kaçırma
         const safeTitle = (item.title || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
 
-        // Kategori renkleri (grafikteki ile aynı)
-        const categoryColors = {
-            'Malware': '#ef4444',
-            'Ransomware': '#dc2626',
-            'Phishing': '#f59e0b',
-            'Vulnerability': '#8b5cf6',
-            'Breach': '#ec4899',
-            'APT': '#6366f1',
-            'DDoS': '#14b8a6',
-            'Data Leak': '#f97316',
-            'General': '#6b7280'
-        };
-
         const category = item.category || 'General';
-        const categoryColor = categoryColors[category] || '#6b7280';
+        const categoryColor = CATEGORY_COLORS[category] || CATEGORY_COLORS['General'];
 
         const card = document.createElement('div');
         card.className = `news-card ${level}`;
@@ -159,6 +167,7 @@ function searchNews(event) {
 
 function renderPagination(total, perPage, current) {
     const container = document.getElementById('pagination-container');
+    if (!container) return;
     container.innerHTML = '';
     const totalPages = Math.ceil(total / perPage);
 
@@ -246,21 +255,8 @@ async function updateStats() {
         const ctxCat = document.getElementById('categoryChart').getContext('2d');
         if (categoryChart) categoryChart.destroy();
 
-        // Her kategori için özel renk paleti
-        const categoryColors = {
-            'Malware': '#ef4444',        // Kırmızı
-            'Ransomware': '#dc2626',     // Koyu kırmızı
-            'Phishing': '#f59e0b',       // Turuncu
-            'Vulnerability': '#8b5cf6',  // Mor
-            'Breach': '#ec4899',         // Pembe
-            'APT': '#6366f1',            // İndigo
-            'DDoS': '#14b8a6',           // Teal
-            'Data Leak': '#f97316',      // Koyu turuncu
-            'General': '#6b7280'         // Gri
-        };
-
         // Her çubuk için renk ata
-        const barColors = catLabels.map(label => categoryColors[label] || '#8b5cf6');
+        const barColors = catLabels.map(label => CATEGORY_COLORS[label] || CATEGORY_COLORS['General']);
 
         categoryChart = new Chart(ctxCat, {
             type: 'bar',
@@ -337,7 +333,8 @@ async function updateStats() {
 async function filterNewsByCategory(category) {
     try {
         // Arama inputunu temizle
-        document.getElementById('search-input').value = '';
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) searchInput.value = '';
 
         // Kategori bilgisini göster
         const feed = document.getElementById('news-feed');
@@ -354,7 +351,8 @@ async function filterNewsByCategory(category) {
             renderPagination(data.total, 10, 1);
 
             // Sayfayı haber akışına kaydır
-            document.getElementById('feed').scrollIntoView({ behavior: 'smooth' });
+            const feedElem = document.getElementById('feed');
+            if (feedElem) feedElem.scrollIntoView({ behavior: 'smooth' });
         } else {
             feed.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #90949a;">
                 📭 <b>${category}</b> kategorisinde haber bulunamadı.
@@ -366,84 +364,93 @@ async function filterNewsByCategory(category) {
 }
 
 async function queryDNS() {
-    const domain = document.getElementById('dns-input').value.trim();
+    const input = document.getElementById('dns-input');
+    const domain = input ? input.value.trim() : '';
     if (!domain) return alert("Lütfen bir domain girin");
 
-    document.getElementById('analysis-panel').classList.remove('hidden');
+    const panel = document.getElementById('analysis-panel');
     const display = document.getElementById('analysis-text');
-    display.innerHTML = `🔍 <b>${domain}</b> DNS kayıtları sorgulanıyor...`;
+    if (panel) panel.classList.remove('hidden');
+
+    if (display) display.innerHTML = `🔍 <b>${domain}</b> DNS kayıtları sorgulanıyor...`;
 
     try {
         const res = await fetch(`/api/dns?domain=${domain}`);
         const data = await res.json();
-        if (data.error) {
-            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
-        } else {
-            display.innerHTML = `
-                <div class="dns-result">
-                    <h4>DNS Raporu: ${data.domain}</h4>
-                    <hr>
-                    <div class="dns-section">
-                        <h5>🌐 A Kayıtları (IP)</h5>
-                        <ul>${data.records.A.length ? data.records.A.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
-                    </div>
-                    <div class="dns-section">
-                        <h5>📧 MX Kayıtları (Mail)</h5>
-                        <ul>${data.records.MX.length ? data.records.MX.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
-                    </div>
-                    <div class="dns-section">
-                        <h5>🔗 CNAME Kayıtları</h5>
-                        <ul>${data.records.CNAME.length ? data.records.CNAME.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
-                    </div>
-                    <div class="dns-section">
-                        <h5>📝 TXT Kayıtları</h5>
-                        <ul>${data.records.TXT.length ? data.records.TXT.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
-                    </div>
-                    <div class="dns-section">
-                        <h5>🔀 Name Server (NS)</h5>
-                        <ul>${data.records.NS.length ? data.records.NS.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
-                    </div>
-                </div>`;
-
+        if (display) {
+            if (data.error) {
+                display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+            } else {
+                display.innerHTML = `
+                    <div class="dns-result">
+                        <h4>DNS Raporu: ${data.domain}</h4>
+                        <hr>
+                        <div class="dns-section">
+                            <h5>🌐 A Kayıtları (IP)</h5>
+                            <ul>${data.records.A.length ? data.records.A.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                        </div>
+                        <div class="dns-section">
+                            <h5>📧 MX Kayıtları (Mail)</h5>
+                            <ul>${data.records.MX.length ? data.records.MX.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                        </div>
+                        <div class="dns-section">
+                            <h5>🔗 CNAME Kayıtları</h5>
+                            <ul>${data.records.CNAME.length ? data.records.CNAME.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                        </div>
+                        <div class="dns-section">
+                            <h5>📝 TXT Kayıtları</h5>
+                            <ul>${data.records.TXT.length ? data.records.TXT.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                        </div>
+                        <div class="dns-section">
+                            <h5>🔀 Name Server (NS)</h5>
+                            <ul>${data.records.NS.length ? data.records.NS.map(r => `<li>${r}</li>`).join('') : '<li>Kayıt yok</li>'}</ul>
+                        </div>
+                    </div>`;
+            }
         }
-    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+    } catch (e) { if (display) display.innerHTML = "Sistem hatası oluştu."; }
 }
 
 async function queryWhois() {
-    const domain = document.getElementById('whois-input').value.trim();
+    const input = document.getElementById('whois-input');
+    const domain = input ? input.value.trim() : '';
     if (!domain) return alert("Lütfen bir domain girin");
 
-    document.getElementById('analysis-panel').classList.remove('hidden');
+    const panel = document.getElementById('analysis-panel');
     const display = document.getElementById('analysis-text');
-    display.innerHTML = `🔍 <b>${domain}</b> WHOIS bilgileri çekiliyor...`;
+    if (panel) panel.classList.remove('hidden');
+    if (display) display.innerHTML = `🔍 <b>${domain}</b> WHOIS bilgileri çekiliyor...`;
 
     try {
         const res = await fetch(`/api/whois?domain=${domain}`);
         const data = await res.json();
-        if (data.error) {
-            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
-        } else {
-            display.innerHTML = `
-                <div class="whois-result">
-                    <h4>WHOIS Raporu: ${data.domain}</h4>
-                    <hr>
-                    <p><b>🏢 Kayıt Kuruluşu (Registrar):</b> ${data.registrar || 'Bilinmiyor'}</p>
-                    <p><b>📅 Oluşturulma:</b> ${data.creation_date}</p>
-                    <p><b>⌛ Bitiş:</b> ${data.expiration_date}</p>
-                    <p><b>📜 Durum:</b> ${data.status}</p>
-                    <br>
-                    <h5>🌐 Name Servers</h5>
-                    <ul>${data.name_servers.map(ns => `<li>${ns}</li>`).join('')}</ul>
-                </div>`;
+        if (display) {
+            if (data.error) {
+                display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+            } else {
+                display.innerHTML = `
+                    <div class="whois-result">
+                        <h4>WHOIS Raporu: ${data.domain}</h4>
+                        <hr>
+                        <p><b>🏢 Kayıt Kuruluşu (Registrar):</b> ${data.registrar || 'Bilinmiyor'}</p>
+                        <p><b>📅 Oluşturulma:</b> ${data.creation_date}</p>
+                        <p><b>⌛ Bitiş:</b> ${data.expiration_date}</p>
+                        <p><b>📜 Durum:</b> ${data.status}</p>
+                        <br>
+                        <h5>🌐 Name Servers</h5>
+                        <ul>${data.name_servers.map(ns => `<li>${ns}</li>`).join('')}</ul>
+                    </div>`;
+            }
         }
-    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+    } catch (e) { if (display) display.innerHTML = "Sistem hatası oluştu."; }
 }
 
 async function analyzeNews(title, link) {
+    const panel = document.getElementById('analysis-panel');
+    const display = document.getElementById('analysis-text');
+    if (panel) panel.classList.remove('hidden');
+    if (display) display.innerText = "Analiz ediliyor...";
 
-
-    document.getElementById('analysis-panel').classList.remove('hidden');
-    document.getElementById('analysis-text').innerText = "Analiz ediliyor...";
     try {
         const res = await fetch('/api/analyze', {
             method: 'POST',
@@ -451,84 +458,99 @@ async function analyzeNews(title, link) {
             body: JSON.stringify({ title, link })
         });
         const data = await res.json();
-        document.getElementById('analysis-text').innerText = data.analysis;
-        // İndirme butonu ekle
-        const downloadBtn = document.createElement('button');
-        downloadBtn.className = 'btn-report';
-        downloadBtn.style.marginTop = '10px';
-        downloadBtn.innerText = '💾 Analizi İndir (.md)';
-        downloadBtn.onclick = () => {
-            const blob = new Blob([data.analysis], { type: 'text/markdown' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `sentinel-analiz-${new Date().getTime()}.md`;
-            a.click();
-        };
-        document.getElementById('analysis-text').appendChild(document.createElement('br'));
-        document.getElementById('analysis-text').appendChild(downloadBtn);
+        if (display) {
+            display.innerText = data.analysis;
+            // İndirme butonu ekle
+            const downloadBtn = document.createElement('button');
+            downloadBtn.className = 'btn-report';
+            downloadBtn.style.marginTop = '10px';
+            downloadBtn.innerText = '💾 Analizi İndir (.md)';
+            downloadBtn.onclick = () => {
+                const blob = new Blob([data.analysis], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sentinel-analiz-${new Date().getTime()}.md`;
+                a.click();
+            };
+            display.appendChild(document.createElement('br'));
+            display.appendChild(downloadBtn);
+        }
 
         fetchNews(currentPage);
 
-    } catch (e) { document.getElementById('analysis-text').innerText = "Hata oluştu."; }
+    } catch (e) { if (display) display.innerText = "Hata oluştu."; }
 }
 
 async function queryCVE() {
-    const cveId = document.getElementById('cve-input').value.trim();
+    const input = document.getElementById('cve-input');
+    const cveId = input ? input.value.trim() : '';
     if (!cveId) return alert("Lütfen bir CVE ID girin (Örn: CVE-2024-1234)");
 
-    document.getElementById('analysis-panel').classList.remove('hidden');
+    const panel = document.getElementById('analysis-panel');
     const display = document.getElementById('analysis-text');
-    display.innerHTML = `<div class="loading">🔍 <b>${cveId}</b> araştırılıyor ve AI analizi hazırlanıyor...</div>`;
+
+    if (panel) panel.classList.remove('hidden');
+    if (display) display.innerHTML = `<div class="loading">🔍 <b>${cveId}</b> araştırılıyor ve AI analizi hazırlanıyor...</div>`;
 
     try {
         const res = await fetch(`/api/cve?id=${cveId}`);
         const data = await res.json();
-        if (data.error) {
-            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
-        } else {
-            display.innerHTML = `
-                <div class="cve-result">
-                    <h4>${data.id} Analysis</h4>
-                    <p><b>CVSS:</b> <span class="badge-${parseFloat(data.cvss) > 7 ? 'critical' : 'medium'}">${data.cvss}</span></p>
-                    <p><b>Özet:</b> ${data.summary}</p>
-                    <hr>
-                    <div class="ai-commentary">
-                        <h5>🧠 AI Güvenlik Analizi</h5>
-                        ${data.ai_comment.replace(/\n/g, '<br>')}
-                    </div>
-                </div>`;
+        if (display) {
+            if (data.error) {
+                display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+            } else {
+                display.innerHTML = `
+                    <div class="cve-result">
+                        <h4>${data.id} Analysis</h4>
+                        <p><b>CVSS:</b> <span class="badge-${parseFloat(data.cvss) > 7 ? 'critical' : 'medium'}">${data.cvss}</span></p>
+                        <p><b>Özet:</b> ${data.summary}</p>
+                        <hr>
+                        <div class="ai-commentary">
+                            <h5>🧠 AI Güvenlik Analizi</h5>
+                            ${data.ai_comment.replace(/\n/g, '<br>')}
+                        </div>
+                    </div>`;
+            }
         }
-    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+    } catch (e) { if (display) display.innerHTML = "Sistem hatası oluştu."; }
 }
 
 async function queryIP() {
-    const ip = document.getElementById('ip-input').value.trim();
+    const input = document.getElementById('ip-input');
+    const ip = input ? input.value.trim() : '';
     if (!ip) return alert("Lütfen bir IP adresi girin");
 
-    document.getElementById('analysis-panel').classList.remove('hidden');
+    const panel = document.getElementById('analysis-panel');
     const display = document.getElementById('analysis-text');
-    display.innerHTML = `🔍 <b>${ip}</b> sorgulanıyor...`;
+    if (panel) panel.classList.remove('hidden');
+    if (display) display.innerHTML = `🔍 <b>${ip}</b> sorgulanıyor...`;
 
     try {
         const res = await fetch(`/api/ip?ip=${ip}`);
         const data = await res.json();
-        if (data.error) {
-            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
-        } else {
-            display.innerHTML = `
-                <div class="ip-result">
-                    <h4>IP İstihbarat Raporu: ${data.ip}</h4>
-                    <p>📍 <b>Konum:</b> ${data.location}</p>
-                    <p>🏢 <b>Servis Sağlayıcı (ISP):</b> ${data.isp}</p>
-                    <p>🏭 <b>Organizasyon:</b> ${data.org}</p>
-                    <p>🛡️ <b>AS:</b> ${data.as}</p>
-                </div>`;
+        if (display) {
+            if (data.error) {
+                display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+            } else {
+                display.innerHTML = `
+                    <div class="ip-result">
+                        <h4>IP İstihbarat Raporu: ${data.ip}</h4>
+                        <p>📍 <b>Konum:</b> ${data.location}</p>
+                        <p>🏢 <b>Servis Sağlayıcı (ISP):</b> ${data.isp}</p>
+                        <p>🏭 <b>Organizasyon:</b> ${data.org}</p>
+                        <p>🛡️ <b>AS:</b> ${data.as}</p>
+                    </div>`;
+            }
         }
-    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+    } catch (e) { if (display) display.innerHTML = "Sistem hatası oluştu."; }
 }
 
-function closeAnalysis() { document.getElementById('analysis-panel').classList.add('hidden'); }
+function closeAnalysis() {
+    const panel = document.getElementById('analysis-panel');
+    if (panel) panel.classList.add('hidden');
+}
+
 function searchNews(e, page = 1) {
     if (e && e.type === 'keyup' && e.key !== 'Enter') return;
     fetchNews(page);
@@ -544,42 +566,52 @@ async function analyzeAll() {
 }
 
 async function querySubdomains() {
-    const domain = document.getElementById('subs-input').value.trim();
+    const input = document.getElementById('subs-input');
+    const domain = input ? input.value.trim() : '';
     if (!domain) return alert("Lütfen bir domain girin");
 
-    document.getElementById('analysis-panel').classList.remove('hidden');
+    const panel = document.getElementById('analysis-panel');
     const display = document.getElementById('analysis-text');
-    display.innerHTML = `<div class="loading">📡 <b>${domain}</b> için pasif keşif yapılıyor (crt.sh)...</div>`;
+    if (panel) panel.classList.remove('hidden');
+    if (display) display.innerHTML = `<div class="loading">📡 <b>${domain}</b> için pasif keşif yapılıyor (crt.sh)...</div>`;
 
     try {
         const res = await fetch(`/api/subdomains?domain=${domain}`);
         const data = await res.json();
-        if (data.error) {
-            display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
-        } else {
-            display.innerHTML = `
-                <div class="subs-result">
-                    <h4>Keşfedilen Subdomainler: ${data.domain}</h4>
-                    <p><small>Sadece benzersiz ve ilk 50 kayıt listelenmiştir.</small></p>
-                    <hr>
-                    <div style="max-height: 400px; overflow-y: auto; text-align: left;">
-                        <ul style="list-style: none; padding: 0;">
-                            ${data.subdomains.map(s => `<li style="padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #3b82f6;">🔗 ${s}</li>`).join('')}
-                        </ul>
-                    </div>
-                </div>`;
+        if (display) {
+            if (data.error) {
+                display.innerHTML = `<p style="color: #ef4444;">❌ Hata: ${data.error}</p>`;
+            } else {
+                display.innerHTML = `
+                    <div class="subs-result">
+                        <h4>Keşfedilen Subdomainler: ${data.domain}</h4>
+                        <p><small>Sadece benzersiz ve ilk 50 kayıt listelenmiştir.</small></p>
+                        <hr>
+                        <div style="max-height: 400px; overflow-y: auto; text-align: left;">
+                            <ul style="list-style: none; padding: 0;">
+                                ${data.subdomains.map(s => `<li style="padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #3b82f6;">🔗 ${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>`;
+            }
         }
-    } catch (e) { display.innerHTML = "Sistem hatası oluştu."; }
+    } catch (e) { if (display) display.innerHTML = "Sistem hatası oluştu."; }
 }
 
 async function updateSystemHealth() {
     try {
         const res = await fetch('/api/system/health');
         const data = await res.json();
-        document.getElementById('cpu-val').innerText = `${data.cpu}%`;
-        document.getElementById('ram-val').innerText = `${data.ram}%`;
-        document.getElementById('cpu-val').style.color = data.cpu > 80 ? '#ef4444' : '#3b82f6';
-        document.getElementById('ram-val').style.color = data.ram > 80 ? '#ef4444' : '#3b82f6';
+        const cpuElem = document.getElementById('cpu-val');
+        const ramElem = document.getElementById('ram-val');
+        if (cpuElem) {
+            cpuElem.innerText = `${data.cpu}%`;
+            cpuElem.style.color = data.cpu > 80 ? '#ef4444' : '#3b82f6';
+        }
+        if (ramElem) {
+            ramElem.innerText = `${data.ram}%`;
+            ramElem.style.color = data.ram > 80 ? '#ef4444' : '#3b82f6';
+        }
     } catch (e) { }
 }
 
@@ -597,7 +629,6 @@ async function downloadWeeklyReport() {
             report += '---\n\n';
         });
 
-
         const blob = new Blob([report], { type: 'text/markdown' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -606,4 +637,3 @@ async function downloadWeeklyReport() {
         a.click();
     } catch (e) { alert('Rapor oluşturulamadı.'); }
 }
-

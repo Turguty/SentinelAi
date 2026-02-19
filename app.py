@@ -211,6 +211,9 @@ def get_category_stats():
 def analyze_news_route():
     """Belirli bir haberi manuel olarak analiz eder (Doğrulamalı)."""
     try:
+        from core.prompts import ANALYSIS_SYSTEM_PROMPT, generate_news_prompt
+        from core.fetcher import parse_ai_json_to_text
+
         # Pydantic ile veri doğrula
         req_data = AnalyzeRequest(**request.json)
         
@@ -223,39 +226,22 @@ def analyze_news_route():
             conn.close()
             return jsonify({"analysis": existing[0]})
 
-        prompt = (
-            f"Analizine 'TEHDIT SEVIYESI: [KRITIK/ORTA/DUSUK]' ve 'KATEGORI: [Malware/Phishing/Ransomware/Vulnerability/Breach/General]' ile başla.\n"
-            f"Haber: {req_data.title}\nLink: {req_data.link}"
-        )
-        analysis_result = ai_manager.analyze(prompt)
+        prompt = generate_news_prompt(req_data.title, req_data.link)
+        json_result = ai_manager.analyze_json(prompt, system_prompt=ANALYSIS_SYSTEM_PROMPT)
 
-        if analysis_result and not analysis_result.startswith("HATA:"):
-            # Kategoriyi ayıkla ve doğrula
-            category = "General"
-            valid_categories = ["Malware", "Phishing", "Ransomware", "Vulnerability", "Breach", "General"]
-            
-            if "KATEGORI:" in analysis_result:
-                try: 
-                    raw_cat = analysis_result.split("KATEGORI:")[1].split("]")[0].replace("[", "").strip()
-                    # Whitelist kontrolü: Eğer çıkartılan kelime valid değilse "General" yap
-                    found = False
-                    for valid in valid_categories:
-                        if valid.lower() in raw_cat.lower():
-                            category = valid
-                            found = True
-                            break
-                    if not found and len(raw_cat) > 20: # Eğer çok uzunsa muhtemelen hatalı parse
-                        category = "General"
-                    elif not found:
-                        category = raw_cat[:20] # Limit length
-                except: pass
+        if json_result:
+            analysis_text = parse_ai_json_to_text(json_result)
+            category = json_result.get('category', 'General')
             
             cursor.execute("UPDATE news SET ai_analysis = ?, category = ? WHERE link = ?", 
-                           (analysis_result, category, req_data.link))
+                           (analysis_text, category, req_data.link))
             conn.commit()
+            conn.close()
+            return jsonify({"analysis": analysis_text})
         
         conn.close()
-        return jsonify({"analysis": analysis_result})
+        return jsonify({"error": "AI analizi başarısız oldu."}), 500
+
     except ValidationError as e:
         return jsonify({"error": "Geçersiz veri formatı", "details": e.errors()}), 400
     except Exception as e:

@@ -1,6 +1,8 @@
 import os
 import time
 import requests
+import json
+import re
 from dotenv import load_dotenv
 from google import genai
 from groq import Groq
@@ -56,18 +58,22 @@ class AIManager:
                 status[service] = "active"
         return status
 
-    def analyze(self, prompt, use_load_balance=False):
+    def analyze(self, prompt, use_load_balance=False, system_prompt=None):
         """
         Verilen metni mevcut AI servislerini deneyerek analiz eder.
         use_load_balance=True ise servisleri sırayla değil, farklı servisleri deneyecek şekilde dağıtır.
+        system_prompt opsiyonel olarak eklenebilir.
         """
         current_time = time.time()
         
+        full_prompt = prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\nUser Input:\n{prompt}"
+
         # Deneme listesini oluştur
         test_order = self.order.copy()
         if use_load_balance:
             # Load balance durumunda önceliği kaydır (basit Round-Robin benzeri)
-            # time.time() kullanarak her saniye/dakika farklı bir başlangıç servisi seçilebilir
             shift = int(time.time() % len(self.order))
             test_order = self.order[shift:] + self.order[:shift]
 
@@ -80,20 +86,15 @@ class AIManager:
                 time.sleep(1.0) 
                 
                 logger.info(f"🤖 AI Deneniyor: {service.upper()}")
-                if service == "gemini": result = self._call_gemini(prompt)
-                elif service == "groq": result = self._call_groq(prompt)
-                elif service == "mistral": result = self._call_mistral(prompt)
-                elif service == "openrouter": result = self._call_openrouter(prompt)
-                elif service == "huggingface": result = self._call_huggingface(prompt)
+                if service == "gemini": result = self._call_gemini(full_prompt)
+                elif service == "groq": result = self._call_groq(full_prompt)
+                elif service == "mistral": result = self._call_mistral(full_prompt)
+                elif service == "openrouter": result = self._call_openrouter(full_prompt)
+                elif service == "huggingface": result = self._call_huggingface(full_prompt)
                 
                 if result and "HATA:" not in result:
                     logger.info(f"✅ {service.upper()} başarılı.")
-                    # Hangi AI'nın analiz ettiği bilgisini en tepeye ekle
-                    header = f"🤖 **Analiz Sağlayıcı:** {service.upper()}\n"
-                    # Eğer zaten bir AI tarafından imzalanmışsa mükerrer ekleme
-                    if not result.startswith("🤖 **Analiz Sağlayıcı:**"):
-                        result = header + "--- \n" + result
-                    return result
+                    return result # Raw result döndür, imza işini çağıran yere bırakabiliriz veya format json ise dokunma
                 else:
                     raise Exception(result)
 
@@ -106,10 +107,37 @@ class AIManager:
         logger.error("❌ Tüm AI servisleri şu an ulaşılamaz durumda.")
         return "HATA: Tüm AI servisleri şu an ulaşılamaz durumda."
 
+    def analyze_json(self, prompt, system_prompt):
+        """
+        AI çıktısını JSON olarak almaya çalışır ve parse eder.
+        Geriye dict döner veya None döner.
+        """
+        raw_result = self.analyze(prompt, system_prompt=system_prompt)
+        
+        if raw_result and "HATA:" in raw_result:
+            return None
+
+        # JSON temizleme ve parse etme
+        try:
+            # Markdown code block temizliği
+            cleaned = re.sub(r"```json\s*|\s*```", "", raw_result, flags=re.IGNORECASE).strip()
+            # Bazen başında/sonunda yazı olabilir, ilk { ve son } arasını al
+            start = cleaned.find('{')
+            end = cleaned.rfind('}')
+            if start != -1 and end != -1:
+                cleaned = cleaned[start:end+1]
+            
+            return json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON Parse Hatası: {e} | Raw: {raw_result[:100]}...")
+            return None
+
+
     def _call_gemini(self, prompt):
         """Google Gemini 2.0 API üzerinden analiz yapar."""
         try:
             client = genai.Client(api_key=self.keys["gemini"])
+            # Gemini 2.0 Flash JSON modu destekler ama basit text generation kullanalım şimdilik
             return client.models.generate_content(model="gemini-2.0-flash", contents=prompt).text
         except Exception as e:
             return f"HATA: {str(e)}"
@@ -160,3 +188,4 @@ class AIManager:
             return f"HATA: HTTP {res.status_code}"
         except Exception as e:
             return f"HATA: {str(e)}"
+
